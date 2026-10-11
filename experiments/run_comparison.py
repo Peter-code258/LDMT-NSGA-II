@@ -1,4 +1,10 @@
-"""Main comparison experiment: FDA1/FDA3/FDA4 x tau{10,25,50} x 4 algos x 30 seeds.
+"""Main comparison experiment: FDA1/FDA3/FDA4 x tau{10,25,50} x 5 algos x 30 seeds.
+
+Per opening report section 7.6:
+- 5 algorithms: NSGA-II, DNSGA-II-inspired, AR1-Predictive, GMM-inspired, LDT-NSGA-II
+- 30 seeds per (problem, config, algorithm)
+- Same environment change points and evaluation budget per environment
+- Record IGD/HV at generations 0,1,2,5,10 after change
 
 CLI example:
     python -m experiments.run_comparison --problems FDA1,FDA3,FDA4 \
@@ -6,7 +12,7 @@ CLI example:
 
 Quick smoke:
     python -m experiments.run_comparison --problems FDA3 --taus 25 \
-        --seeds 0 --out results/raw --n-gen 50 --limit-seeds 0
+        --seeds 0 --out results/raw --n-gen 50 --limit-seeds 1
 """
 import argparse
 import os
@@ -27,7 +33,7 @@ def _parse_seeds(s):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="LDMT-NSGA-II main comparison")
+    ap = argparse.ArgumentParser(description="LDT-NSGA-II main comparison")
     ap.add_argument("--problems", default="FDA1,FDA3,FDA4")
     ap.add_argument("--taus", default="10,25,50")
     ap.add_argument("--seeds", default="0-29")

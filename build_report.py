@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-ROOT = Path(r"d:\qq\qq的文件\ldmt_dmoea")
+ROOT = Path(r"D:\23-兴湘计科\LDMT-NSGA-II")
 CD = json.loads((ROOT / "results/summary/_chart_data.json").read_text(encoding="utf-8-sig"))
 REC = json.loads((ROOT / "results/summary/_recovery.json").read_text(encoding="utf-8-sig"))
 BOX = json.loads((ROOT / "results/summary/_boxplot.json").read_text(encoding="utf-8-sig"))

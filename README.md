@@ -1,8 +1,14 @@
-# LDMT-NSGA-II
+# LDT-NSGA-II
 
-轻量级分布迁移动态多目标优化器（Lightweight Distribution-Migration
+轻量级分布迁移动态多目标优化器（Lightweight Distribution-Transfer
 dynamic multi-objective optimizer），统一基于 pymoo 的 NSGA-II 内核实现。
 本仓库为动态多目标优化（DMO）方向本科毕业论文的配套研究代码。
+
+**版本说明**：v2.0 — 算法内核已按开题报告 2.0（第 5 章）更新：
+- 种群组成改为 **50/20/30**（迁移 50%、保留旧种群 20%、随机 30%）
+- 趋势中心预测改为线性外推：`mu_hat = clip(mu_e + alpha*(mu_e - mu_{e-1}), l, u)`，默认 `alpha=0.5`
+- 迁移采样改为高斯扰动：`x_tr = clip(mu_hat + z*sigma_e, l, u)`，z~N(0,I)
+- 标准差下限按边界范围计算：`sigma_min = 0.001*(u-l)`
 
 ## 文件结构总览
 
@@ -63,41 +69,41 @@ ldmt_dmoea/
 - **H3（迁移比例与变化幅度影响稳定性）**：迁移比例与环境变化幅度
   `n_t` 会影响算法的稳态与响应性能。
 
-### LDMT 方法
+### LDT 方法（报告 5.1-5.2）
 
-在每次环境变化时（入口 `respond()`，见 [algorithms/ldmt_nsga2.py](algorithms/ldmt_nsga2.py#L68-L134)）：
+在每次环境变化时（入口 `respond()`，见 [algorithms/ldmt_nsga2.py](algorithms/ldmt_nsga2.py#L75-L134)）：
 
 1. 从上一代种群中选出**非支配子集**（数量不足时退回全种群）—
-   [ldmt_nsga2.py L74-L79](algorithms/ldmt_nsga2.py#L74-L79)，
+   [ldmt_nsga2.py L80-L85](algorithms/ldmt_nsga2.py#L80-L85)，
    非支配判定见 [non_dominated_set](algorithms/distribution_features.py#L32-L47)；
-2. 提取其归一化后的**均值 `mu` 与标准差 `sigma`** 作为分布特征 —
-   [ldmt_nsga2.py L82](algorithms/ldmt_nsga2.py#L82)，
+2. 提取其归一化后的**均值 `mu_e` 与标准差 `sigma_e`** 作为分布特征，
+   `sigma_min = 0.001*(u-l)` —
+   [ldmt_nsga2.py L86-L89](algorithms/ldmt_nsga2.py#L86-L89)，
    归一化与特征提取见 [extract_features](algorithms/distribution_features.py#L24-L29)；
-3. 用固定探针点在新旧环境下的目标值差异计算变化幅度 `D_k` —
-   [ldmt_nsga2.py L85-L86](algorithms/ldmt_nsga2.py#L85-L86)，
+3. 用固定探针点在新旧环境下的目标值差异计算变化幅度 `D_k`（仅记录）—
+   [ldmt_nsga2.py L91-L92](algorithms/ldmt_nsga2.py#L91-L92)，
    检测逻辑见 [ChangeDetector.detect](algorithms/environment_manager.py#L42-L49)；
-4. 用 AR(1) 风格外推预测下一环境的分布 `(mu_hat, sigma_hat)`，步长
-   `lambda_k` 根据 `D_k` 的变化自适应裁剪到 `[0.5, 1.5]` —
-   [ldmt_nsga2.py L88-L100](algorithms/ldmt_nsga2.py#L88-L100)，
-   预测公式见 [MigrationFunction.predict](algorithms/distribution_features.py#L76-L87)；
-5. 将上一代整体种群按 `(mu_prev, sigma_prev) -> (mu_hat, sigma_hat)`
-   重新中心化与缩放，得到迁移种群 —
-   [ldmt_nsga2.py L103-L107](algorithms/ldmt_nsga2.py#L103-L107)，
-   迁移实现见 [transfer_population](algorithms/distribution_features.py#L90-L100)；
-6. 按 **70/20/10** 组成新一代种群 —
-   [ldmt_nsga2.py L109-L127](algorithms/ldmt_nsga2.py#L109-L127)：
-   - **70%** 迁移个体
-   - **20%** 局部变异个体（对迁移个体的随机维度加 `N(0, 0.05)` 噪声）
-   - **10%** 均匀随机移民
+4. **趋势中心预测**：`mu_hat = clip(mu_e + alpha*(mu_e - mu_{e-1}), l, u)`，
+   默认 `alpha=0.5`（首次变化时 `mu_hat = mu_e`）—
+   [ldmt_nsga2.py L94-L101](algorithms/ldmt_nsga2.py#L94-L101)；
+5. **高斯扰动采样迁移候选**：`x_tr = clip(mu_hat + z*sigma_e, l, u)`，
+   z~N(0,I) —
+   [ldmt_nsga2.py L103-L117](algorithms/ldmt_nsga2.py#L103-L117)；
+6. 按 **50/20/30** 组成新一代种群 —
+   [ldmt_nsga2.py L119-L134](algorithms/ldmt_nsga2.py#L119-L134)：
+   - **50%** 迁移个体（`transfer_ratio`）
+   - **20%** 保留旧种群个体（`retain_ratio`）
+   - **30%** 均匀随机个体（`random_ratio`）
 
 ### 对比基线
 
 | 算法 | 思路 |
 |---|---|
-| **DNSGA-II** | 变化检测 + 随机移民响应，无分布迁移 |
-| **AR-NSGA-II** | 仅用 AR(1) 预测均值，不做分布缩放迁移 |
-| **GMM-Transfer** | 用高斯混合模型完整描述并迁移分布 |
-| **LDMT-NSGA-II** | 均值/标准差特征 + AR(1) 迁移 + 70/20/10 组成 |
+| **NSGA-II** | 静态基准，环境变化时不迁移，仅重新评估当前种群 |
+| **DNSGA-II-inspired** | 变化检测 + 随机移民响应，无分布迁移 |
+| **AR1-Predictive** | 一阶趋势预测基线（透明定义，非特定论文复现） |
+| **GMM-inspired** | 高斯混合全分布对照（非原 KTMM 复现） |
+| **LDT-NSGA-II** | 均值/标准差特征 + 趋势中心 + 50/20/30 混合初始化 |
 
 ### 测试问题与指标
 
@@ -118,35 +124,31 @@ ldmt_dmoea/
   得到归一化变化幅度 `D_k = mean(|new_F - prev_F| / scale)` —
   [ChangeDetector.detect](algorithms/environment_manager.py#L42-L49)。
 
-### 分布迁移预测（MigrationFunction）
+### 趋势中心预测（报告 5.2）
 
-- 维护 `(mu_k, sigma_k, D_k)` 历史 —
-  [MigrationFunction](algorithms/distribution_features.py#L50-L87)；
-- 当历史不少于 2 个变化幅度时：
-
-  ```
-  lambda_k = clip(1.0 + alpha * (D_k - D_prev) / (D_prev + 1e-9), 0.5, 1.5)
-  ```
-
-  实现见 [distribution_features.py L78-L82](algorithms/distribution_features.py#L78-L82)；
-  首次变化时 `lambda_k = 1.0`；
-- 预测下一分布：
+- 维护上一环境的均值 `mu_prev` 与标准差 `sigma_prev` —
+  [ldmt_nsga2.py L94-L101](algorithms/ldmt_nsga2.py#L94-L101)；
+- 当历史不少于 2 个环境时：
 
   ```
-  mu_hat    = mu_prev  + lambda_k * (mu_prev  - mu_prev2)
-  sigma_hat = max(sigma_min, sigma_prev + lambda_k * (sigma_prev - sigma_prev2))
+  mu_hat = clip(mu_e + alpha * (mu_e - mu_{e-1}), l, u)
   ```
 
-  实现见 [distribution_features.py L83-L86](algorithms/distribution_features.py#L83-L86)。
+  默认 `alpha=0.5`（敏感性测试 `{0, 0.25, 0.5, 0.75, 1.0}`）；
+  首次变化时 `mu_hat = mu_e`；
+- 标准差下限：`sigma_min = 0.001 * (u - l)` —
+  [ldmt_nsga2.py L86-L89](algorithms/ldmt_nsga2.py#L86-L89)。
 
-### 种群迁移与组成
+### 种群迁移与组成（报告 5.2）
 
-- `transfer_population` 将上一代种群 `Z` 按比例
-  `sigma_hat / sigma_prev` 缩放并平移到 `mu_hat`，再裁剪回 `[0,1]` —
-  [transfer_population](algorithms/distribution_features.py#L90-L100)；
-- 迁移种群经 70/20/10 拆分后，局部变异部分对随机选取的 `D//3` 个维度
-  加 `N(0, 0.05)` 噪声，移民部分在 `[xl, xu]` 内均匀采样 —
-  [ldmt_nsga2.py L109-L127](algorithms/ldmt_nsga2.py#L109-L127)。
+- 迁移候选采样：`x_tr = clip(mu_hat + z * sigma_e, l, u)`，z~N(0,I) —
+  [ldmt_nsga2.py L103-L117](algorithms/ldmt_nsga2.py#L103-L117)；
+- 新种群按 **50/20/30** 组成 —
+  [ldmt_nsga2.py L119-L134](algorithms/ldmt_nsga2.py#L119-L134)：
+  - **50%** 迁移个体（`transfer_ratio=0.5`）
+  - **20%** 保留旧种群（`retain_ratio=0.2`）
+  - **30%** 均匀随机（`random_ratio=0.3`）
+- 非有限迁移值自动替换为均匀随机样本。
 
 ### NSGA-II 内核与逐代评估
 
@@ -190,7 +192,7 @@ pytest -q
 所有实验均支持**断点续跑**：输出 CSV 中已存在的组合会被自动跳过。
 
 ```bash
-# 主对比实验（FDA1/3/4 × tau{10,25,50} × 4 算法 × 30 种子）
+# 主对比实验（FDA1/3/4 × tau{10,25,50} × 5 算法 × 30 种子）
 python -m experiments.run_comparison --problems FDA1,FDA3,FDA4 \
     --taus 10,25,50 --seeds 0-29 --out results/raw
 
@@ -198,9 +200,13 @@ python -m experiments.run_comparison --problems FDA1,FDA3,FDA4 \
 python -m experiments.run_comparison --problems FDA3 --taus 25 \
     --seeds 0 --out results/raw --n-gen 50 --limit-seeds 1
 
-# 消融 / 敏感性 / 补充实验
+# 消融实验（报告 7.7）
 python -m experiments.run_ablation
+
+# 敏感性实验（报告 7.8）
 python -m experiments.run_sensitivity
+
+# 补充实验
 python -m experiments.run_supplementary
 ```
 
@@ -222,11 +228,12 @@ python -m experiments.run_supplementary
 
 - `run_ablation`：`--problems`（FDA1,FDA3,FDA4）、`--tau`（25）、
   `--n-gen`（300）、`--n`（100）、`--n-t`（20）、`--seeds`（0-29）、
-  `--limit-seeds`。消融变体：`full`、`no_feature_simplification`、
-  `no_transfer`。
-- `run_sensitivity`：`--problems`（FDA3）、`--tau`（25）、`--n-gen`
-  （300）、`--seeds`（0-29）、`--limit-seeds`。扫描 N ∈ {50,100,150}
-  与 n_t ∈ {10,20,40}。
+  `--limit-seeds`。消融变体：`full`、`ablation_a`（关闭趋势）、
+  `ablation_b`（关闭分布迁移）、`ablation_c`（κ=0）。
+- `run_sensitivity`：`--problems`（FDA1,FDA3,FDA4）、`--tau`（25）、
+  `--n-gen`（300）、`--seeds`（0-29）、`--limit-seeds`。扫描 N ∈
+  {50,100,200}、n_t ∈ {10,20,40}、ρ ∈ {0.25,0.5,0.75}、α ∈
+  {0,0.25,0.5,0.75,1.0}。
 - `run_supplementary`：`--problems`（DMOP1,DMOP2）、`--tau`（25）、
   `--n-gen`（300）、`--n`（100）、`--n-t`（20）、`--algos`（全部）、
   `--seeds`（0-29）、`--limit-seeds`。
@@ -260,10 +267,11 @@ cd ldmt-experiment-report && python -m http.server 8000
 
 | 键 | 名称 | 说明 |
 |---|---|---|
-| `DNSGA2` | DNSGA-II | 变化检测 + 随机移民响应 |
-| `AR_NSGA2` | AR-NSGA-II | AR(1) 均值预测，不做分布迁移 |
-| `GMM_Transfer` | GMM-Transfer | 完整高斯混合分布迁移 |
-| `LDMT_NSGA2` | LDMT-NSGA-II | 均值/方差特征 + AR(1) 迁移 + 70/20/10 组成 |
+| `NSGA-II` | NSGA-II | 静态基准，无迁移 |
+| `DNSGA-II-inspired` | DNSGA-II-inspired | 变化检测 + 随机移民响应 |
+| `AR1-Predictive` | AR1-Predictive | 一阶趋势预测基线 |
+| `GMM-inspired` | GMM-inspired | 高斯混合全分布对照 |
+| `LDT-NSGA-II` | LDT-NSGA-II | 均值/标准差特征 + 趋势中心 + 50/20/30 混合初始化 |
 
 ## 说明
 
@@ -274,7 +282,11 @@ cd ldmt-experiment-report && python -m http.server 8000
   （`f2 = g*(1-(f1/g)^2)`，PF `{(u,1-u^2)}`）。PlatEMO master 未提供
   DMOP1/DMOP2.m，因此 **dMOP2 为本项目实现**（时变前沿，见
   `problems/dmop2.py`）。
-- **GMM-Transfer** 为本项目对比实现，并非复现某篇特定论文的 KTMM。
+- **GMM-inspired** 为本项目对比实现，并非复现某篇特定论文的 KTMM。
+- **LDT-NSGA-II** 算法参数（ρ=0.5、κ=0.2、α=0.5）为开题报告 2.0 默认值，
+  非文献证明最优值，已在敏感性实验中测试。
 - HV 使用各问题固定参考点（原始目标值，不做逐轮归一化）：FDA1
   `(1.1,1.1)`、FDA3 `(2.2,1.1)`、FDA4 `(1.1,1.1,1.1)`。
 - 所有随机性均设种子；环境段 `k` 使用 `seed = run_seed + k`。
+- 实验结果仅适用于实际测试的问题、参数和硬件范围，不直接外推到所有
+  真实工程任务。

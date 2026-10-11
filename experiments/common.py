@@ -8,7 +8,7 @@ from typing import List, Optional
 import numpy as np
 
 from problems import FDA1, FDA3, FDA4, DMOP1, DMOP2
-from algorithms import (DNSGA2Response, ARNSGA2, GMMTransfer, LDMTNSGA2,
+from algorithms import (DNSGA2Response, ARNSGA2, GMMTransfer, LDTNSGA2,
                          DynamicDriver)
 
 PROBLEM_REGISTRY = {
@@ -20,10 +20,16 @@ PROBLEM_REGISTRY = {
 }
 
 ALGORITHM_REGISTRY = {
+    "NSGA-II": DNSGA2Response,  # static baseline (no migration)
+    "DNSGA-II-inspired": DNSGA2Response,
+    "AR1-Predictive": ARNSGA2,
+    "GMM-inspired": GMMTransfer,
+    "LDT-NSGA-II": LDTNSGA2,
+    # backward-compatible aliases
     "DNSGA2": DNSGA2Response,
     "AR_NSGA2": ARNSGA2,
     "GMM_Transfer": GMMTransfer,
-    "LDMT_NSGA2": LDMTNSGA2,
+    "LDMT_NSGA2": LDTNSGA2,
 }
 
 ROW_FIELDS = [
@@ -45,6 +51,8 @@ class RunConfig:
         default_factory=lambda: list(ALGORITHM_REGISTRY.keys()))
     seeds: range = range(30)
     code_version: str = "v1.0"
+    # report 7.4: evaluations per environment = 5000
+    evals_per_env: int = 5000
 
 
 def problem_factory(problem_name, tau_t=25, n_t=20):

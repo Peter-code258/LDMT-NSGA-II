@@ -1,47 +1,57 @@
-"""LDMT-NSGA-II: Lightweight Distribution-Migration dynamic optimizer.
+"""LDT-NSGA-II: Lightweight Distribution-Transfer dynamic optimizer.
 
-On each environment change the algorithm:
-  1. selects the non-dominated subset ND_X of the previous population
-     (falls back to the whole population if |ND_X| is too small);
-  2. extracts mean-std features (mu_prev, sigma_prev) from ND_X;
-  3. computes the probe-based change magnitude D_k (via ChangeDetector);
-  4. predicts the next distribution (mu_hat, sigma_hat) with the
-     :class:`MigrationFunction` (AR(1)-style translation with adaptively
-     clipped lambda_k);
-  5. transfers the WHOLE previous population to the predicted distribution;
-  6. composes the new population with the 70/20/10 split:
-        - 70% transferred individuals,
-        - 20% local-mutated individuals (small Gaussian noise on a random
-          subset of dims),
-        - 10% uniform random immigrants.
+Implements the algorithm described in the opening report (section 5):
 
-The 70/20/10 split and alpha=1.0 are the default-to-be-frozen configuration.
+5.1 Distribution features:
+    - Per-dimension mean mu_e = mean(P_e), per-dimension std sigma_e = std(P_e, ddof=0)
+    - Extracted from the previous population (or non-dominated subset)
+    - sigma_min = 0.001 * (u - l) to avoid degenerate dimensions
+
+5.2 Trend centre and sampling:
+    - If >= 2 environments: mu_hat = clip(mu_e + alpha * (mu_e - mu_{e-1}), l, u)
+    - Else: mu_hat = mu_e
+    - alpha default 0.5, sensitivity tested {0, 0.25, 0.5, 0.75, 1.0}
+    - Transfer candidates: x_tr = clip(mu_hat + z * sigma_e, l, u), z ~ N(0, I)
+
+    New population composition:
+        - transfer_ratio rho = 0.5 (migrated candidates)
+        - retain_ratio kappa = 0.2 (old population retained)
+        - random_ratio = 1 - rho - kappa = 0.3 (uniform random)
+    - rho + kappa <= 1 enforced
+    - Non-finite migrated values replaced with uniform random samples
+
+The 50/20/30 split and alpha=0.5 are the default-to-be-frozen configuration
+per the opening report (section 7.4).
 """
 import numpy as np
 
 from .distribution_features import (
-    normalize, denormalize, extract_features, non_dominated_set,
-    transfer_population, MigrationFunction)
+    normalize, denormalize, extract_features, non_dominated_set)
 from .environment_manager import ChangeDetector
 
 
-class LDMTNSGA2:
-    name = "LDMT_NSGA2"
+class LDTNSGA2:
+    """LDT-NSGA-II algorithm class (report section 5, 7.4)."""
+    name = "LDT_NSGA2"
 
-    def __init__(self, transfer_ratio=0.7, local_mut_ratio=0.2,
-                 immigrant_ratio=0.1, alpha=1.0, n_probes=10):
+    def __init__(self, transfer_ratio=0.5, retain_ratio=0.2,
+                 random_ratio=0.3, trend_alpha=0.5, n_probes=10):
+        # enforce rho + kappa <= 1
         self.transfer_ratio = float(transfer_ratio)
-        self.local_mut_ratio = float(local_mut_ratio)
-        self.immigrant_ratio = float(immigrant_ratio)
-        self.alpha = float(alpha)
+        self.retain_ratio = float(retain_ratio)
+        self.random_ratio = float(random_ratio)
+        assert abs(self.transfer_ratio + self.retain_ratio +
+                   self.random_ratio - 1.0) < 1e-9, \
+            "transfer + retain + random ratios must sum to 1.0"
+        assert self.transfer_ratio + self.retain_ratio <= 1.0 + 1e-9, \
+            "transfer + retain must be <= 1.0"
+        self.trend_alpha = float(trend_alpha)
         self.n_probes = int(n_probes)
-        self.migration = MigrationFunction(alpha=alpha)
         self._probe = None
         self._prev_probe_F = None
-        # store previous env features for the AR(1)-style extrapolation
-        self._mu_prev2 = None
-        self._sigma_prev2 = None
-        self._D_prev = None
+        # store previous env features for trend extrapolation
+        self._mu_prev = None
+        self._sigma_prev = None
 
     # ---- probe / change detection ----
     def _ensure_probe(self, prev_X, D):
@@ -70,7 +80,7 @@ class LDMTNSGA2:
         xl = np.asarray(problem.xl, dtype=float)
         xu = np.asarray(problem.xu, dtype=float)
 
-        # 1. non-dominated subset
+        # 1. extract features from previous population (non-dominated subset)
         nd_mask = non_dominated_set(prev_X, prev_F)
         nd_X = prev_X[nd_mask]
         min_nd = max(10, N // 4)
@@ -78,56 +88,69 @@ class LDMTNSGA2:
             nd_X = prev_X.copy()
         n_nd = int(nd_X.shape[0])
 
-        # 2. features from ND_X
-        mu_prev, sigma_prev = extract_features(nd_X, xl, xu)
+        mu_e, sigma_e = extract_features(nd_X, xl, xu)
+        # sigma_min = 0.001 * (u - l) per report 5.1
+        sigma_min = 0.001 * (xu - xl)
+        sigma_e = np.maximum(sigma_e, sigma_min)
 
-        # 3. probe change magnitude D_k
+        # 2. probe change magnitude D_k (for logging only)
         self._ensure_probe(prev_X, D)
         Dk = self._detect_change(problem)
 
-        # 4. predict next distribution
-        mu_prev2 = self._mu_prev2 if self._mu_prev2 is not None else mu_prev
-        sigma_prev2 = (self._sigma_prev2 if self._sigma_prev2 is not None
-                        else sigma_prev)
-        D_prev = self._D_prev if self._D_prev is not None else 0.0
-        mu_hat, sigma_hat, lam_k = self.migration.predict(
-            mu_prev, mu_prev2, sigma_prev, sigma_prev2, Dk, D_prev)
-        # record into the migration history (for the lambda threshold logic)
-        self.migration.record(mu_prev, sigma_prev, Dk)
-        # update the prev2 slots for the NEXT change
-        self._mu_prev2 = mu_prev
-        self._sigma_prev2 = sigma_prev
-        self._D_prev = Dk
+        # 3. trend-centre prediction (report 5.2)
+        if self._mu_prev is not None:
+            mu_hat = np.clip(
+                mu_e + self.trend_alpha * (mu_e - self._mu_prev),
+                xl, xu)
+        else:
+            mu_hat = mu_e.copy()
+        # store for next change
+        self._mu_prev = mu_e.copy()
+        self._sigma_prev = sigma_e.copy()
 
-        # 5. transfer the WHOLE previous population to the predicted dist
-        transferred = transfer_population(
-            prev_X, xl, xu, mu_prev, sigma_prev, mu_hat, sigma_hat)
-        bclip = float(np.mean(np.any(
-            (transferred <= xl + 1e-9) | (transferred >= xu - 1e-9),
-            axis=1)))
-
-        # 6/7/8. compose with 70/20/10 split
+        # 4. sample transfer candidates: x_tr = clip(mu_hat + z * sigma_e, l, u)
         n_transfer = int(round(self.transfer_ratio * N))
-        n_mut = int(round(self.local_mut_ratio * N))
-        n_imm = int(round(self.immigrant_ratio * N))
-        # transfer part
-        idx = rng.permutation(N)
-        transfer_part = transferred[idx[:n_transfer]]
-        # local mutation part: take from transferred, add small noise
-        mut_part = transferred[idx[n_transfer:n_transfer + n_mut]].copy()
-        if mut_part.shape[0] > 0:
-            n_dims = max(1, D // 3)
-            dim_sel = rng.choice(D, size=n_dims, replace=False)
-            noise = rng.normal(0.0, 0.05, size=mut_part.shape)
-            mut_part[:, dim_sel] += noise[:, dim_sel]
-            mut_part = np.clip(mut_part, xl, xu)
-        # immigrants
-        imm_part = rng.uniform(xl, xu, size=(n_imm, D))
-        new_X = np.concatenate([transfer_part, mut_part, imm_part], axis=0)
+        if n_transfer > 0:
+            z = rng.normal(0.0, 1.0, size=(n_transfer, D))
+            # broadcast sigma_e (normalized space) -> denormalize scale
+            # sample in normalized [0,1] space then denormalize
+            mu_hat_norm = normalize(np.atleast_2d(mu_hat), xl, xu)[0]
+            sigma_e_norm = sigma_e / (xu - xl + 1e-12)
+            transfer_norm = np.clip(
+                mu_hat_norm[None, :] + z * sigma_e_norm[None, :],
+                0.0, 1.0)
+            transfer_part = denormalize(transfer_norm, xl, xu)
+            # replace non-finite with uniform random
+            bad = ~np.isfinite(transfer_part).all(axis=1)
+            if bad.any():
+                transfer_part[bad] = rng.uniform(xl, xu, size=(bad.sum(), D))
+        else:
+            transfer_part = np.empty((0, D))
+
+        # 5. retain old population
+        n_retain = int(round(self.retain_ratio * N))
+        if n_retain > 0:
+            idx = rng.permutation(N)
+            retain_part = prev_X[idx[:n_retain]].copy()
+        else:
+            retain_part = np.empty((0, D))
+
+        # 6. uniform random immigrants
+        n_random = int(round(self.random_ratio * N))
+        if n_random > 0:
+            random_part = rng.uniform(xl, xu, size=(n_random, D))
+        else:
+            random_part = np.empty((0, D))
+
+        new_X = np.concatenate([transfer_part, retain_part, random_part],
+                               axis=0)
         new_X = self._resize(new_X, N, xl, xu, rng)
 
+        bclip = float(np.mean(np.any(
+            (new_X <= xl + 1e-9) | (new_X >= xu - 1e-9), axis=1)))
+
         return new_X, {
-            "lambda_k": float(lam_k),
+            "lambda_k": 1.0,  # not used in LDT per report
             "boundary_clip_ratio": bclip,
             "n_nd": n_nd,
             "Dk": float(Dk),
@@ -141,3 +164,7 @@ class LDMTNSGA2:
             X = np.concatenate(
                 [X, rng.uniform(xl, xu, size=(1, D))], axis=0)
         return X
+
+
+# Backward-compatible alias for existing experiment scripts
+LDMTNSGA2 = LDTNSGA2

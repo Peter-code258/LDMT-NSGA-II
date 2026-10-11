@@ -1,148 +1,89 @@
-"""Ablation study: FDA1/3/4, tau=25, 30 seeds.
+"""Ablation study per opening report section 7.7.
 
-Variants (report 5.5):
-  - full                          : standard LDMT-NSGA-II.
-  - no_feature_simplification     : use a GMM / covariance distribution
-                                    description instead of mean-std, but keep
-                                    the LDMT transfer + lambda adaptation.
-  - no_transfer                   : keep feature extraction but drop the
-                                    center/scale mapping (reuse prev pop) +
-                                    standard random response.
+Variants:
+  - Full LDT        : all modules enabled (rho=0.5, kappa=0.2, random=0.3, alpha=0.5)
+  - Ablation-A      : disable trend extrapolation (alpha=0, mu_hat = mu_e)
+  - Ablation-B      : disable distribution transfer (use old pop + random candidates)
+  - Ablation-C      : kappa=0 (no old population retention)
 """
 import argparse
 import os
 import sys
-import copy
+import csv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
-from algorithms.ldmt_nsga2 import LDMTNSGA2
+from algorithms.ldmt_nsga2 import LDTNSGA2
 from algorithms.distribution_features import (
-    normalize, denormalize, extract_features, non_dominated_set,
-    transfer_population)
-from experiments.common import (RunConfig, ExperimentRunner, run_single,
-                                 ALGORITHM_REGISTRY, ROW_FIELDS)
-import csv
+    normalize, denormalize, extract_features, non_dominated_set)
+from algorithms.environment_manager import ChangeDetector
+from experiments.common import (RunConfig, ExperimentRunner, problem_factory,
+                                 ROW_FIELDS)
 
 
-class LDMTNoFeatureSimplification(LDMTNSGA2):
-    """GMM/covariance distribution description instead of mean-std, but the
-    LDMT transfer + lambda adaptation is preserved."""
-    name = "LDMT_no_feature"
+class LDTAblationA(LDTNSGA2):
+    """Ablation-A: disable trend extrapolation (alpha=0, mu_hat = mu_e)."""
+    name = "LDT_AblationA"
 
     def __init__(self, **kw):
-        super().__init__(**kw)
-        self._gmm = None
+        super().__init__(trend_alpha=0.0, **kw)
+
+
+class LDTAblationB(LDTNSGA2):
+    """Ablation-B: disable distribution transfer, use old pop + random mix."""
+    name = "LDT_AblationB"
 
     def respond(self, prev_X, prev_F, problem, env_index, rng):
-        from sklearn.mixture import GaussianMixture
         N, D = prev_X.shape
         xl = np.asarray(problem.xl, dtype=float)
         xu = np.asarray(problem.xu, dtype=float)
         nd_mask = non_dominated_set(prev_X, prev_F)
         nd_X = prev_X[nd_mask] if nd_mask.sum() >= max(10, N // 4) else prev_X
-        mu_prev, sigma_prev = extract_features(nd_X, xl, xu)
+        n_nd = int(nd_X.shape[0])
+        mu_e, sigma_e = extract_features(nd_X, xl, xu)
         self._ensure_probe(prev_X, D)
         Dk = self._detect_change(problem)
-        mu_prev2 = self._mu_prev2 if self._mu_prev2 is not None else mu_prev
-        sigma_prev2 = (self._sigma_prev2 if self._sigma_prev2 is not None
-                        else sigma_prev)
-        D_prev = self._D_prev if self._D_prev is not None else 0.0
-        mu_hat, sigma_hat, lam_k = self.migration.predict(
-            mu_prev, mu_prev2, sigma_prev, sigma_prev2, Dk, D_prev)
-        self.migration.record(mu_prev, sigma_prev, Dk)
-        self._mu_prev2 = mu_prev
-        self._sigma_prev2 = sigma_prev
-        self._D_prev = Dk
-        # GMM on normalized ND_X; shift samples by (mu_hat - mu_prev)
-        Z = np.clip(normalize(nd_X, xl, xu), 0, 1)
-        k = max(1, min(3, len(nd_X) - 1))
-        try:
-            gmm = GaussianMixture(n_components=k, covariance_type="diag",
-                                   reg_covar=1e-4, random_state=42)
-            gmm.fit(Z)
-            samples = gmm.sample(N)[0]
-        except Exception:
-            samples = rng.uniform(0, 1, size=(N, D))
-        samples = np.clip(samples + (mu_hat - mu_prev), 0, 1)
-        transferred = denormalize(samples, xl, xu)
-        # 70/20/10 composition (same as full LDMT)
-        new_X = self._compose(prev_X, transferred, xl, xu, rng)
+        # no distribution transfer: reuse old population directly
+        n_transfer = int(round(self.transfer_ratio * N))
+        n_retain = int(round(self.retain_ratio * N))
+        n_random = int(round(self.random_ratio * N))
+        # transfer part = random samples from uniform (no distribution info)
+        transfer_part = rng.uniform(xl, xu, size=(n_transfer, D))
+        idx = rng.permutation(N)
+        retain_part = prev_X[idx[:n_retain]].copy()
+        random_part = rng.uniform(xl, xu, size=(n_random, D))
+        new_X = np.concatenate([transfer_part, retain_part, random_part], axis=0)
+        new_X = self._resize(new_X, N, xl, xu, rng)
         bclip = float(np.mean(np.any(
             (new_X <= xl + 1e-9) | (new_X >= xu - 1e-9), axis=1)))
-        return new_X, {"lambda_k": float(lam_k),
-                        "boundary_clip_ratio": bclip,
-                        "n_nd": int(nd_X.shape[0]), "Dk": float(Dk)}
-
-    def _compose(self, prev_X, transferred, xl, xu, rng):
-        N, D = prev_X.shape
-        n_transfer = int(round(self.transfer_ratio * N))
-        n_mut = int(round(self.local_mut_ratio * N))
-        n_imm = int(round(self.immigrant_ratio * N))
-        idx = rng.permutation(N)
-        transfer_part = transferred[idx[:n_transfer]]
-        mut_part = transferred[idx[n_transfer:n_transfer + n_mut]].copy()
-        if mut_part.shape[0] > 0:
-            n_dims = max(1, D // 3)
-            dim_sel = rng.choice(D, size=n_dims, replace=False)
-            mut_part[:, dim_sel] += rng.normal(0, 0.05, size=mut_part.shape)[:, dim_sel]
-            mut_part = np.clip(mut_part, xl, xu)
-        imm_part = rng.uniform(xl, xu, size=(n_imm, D))
-        new_X = np.concatenate([transfer_part, mut_part, imm_part], axis=0)
-        return self._resize(new_X, N, xl, xu, rng)
+        return new_X, {
+            "lambda_k": 1.0,
+            "boundary_clip_ratio": bclip,
+            "n_nd": n_nd,
+            "Dk": float(Dk),
+        }
 
 
-class LDMTNoTransfer(LDMTNSGA2):
-    """Keep feature extraction but drop the center/scale mapping — reuse the
-    previous population + standard random response."""
-    name = "LDMT_no_transfer"
+class LDTAblationC(LDTNSGA2):
+    """Ablation-C: kappa=0 (no old population retention)."""
+    name = "LDT_AblationC"
 
-    def respond(self, prev_X, prev_F, problem, env_index, rng):
-        N, D = prev_X.shape
-        xl = np.asarray(problem.xl, dtype=float)
-        xu = np.asarray(problem.xu, dtype=float)
-        nd_mask = non_dominated_set(prev_X, prev_F)
-        nd_X = prev_X[nd_mask] if nd_mask.sum() >= max(10, N // 4) else prev_X
-        mu_prev, sigma_prev = extract_features(nd_X, xl, xu)  # features kept
-        self._ensure_probe(prev_X, D)
-        Dk = self._detect_change(problem)
-        # no transfer: reuse prev pop directly (no center/scale mapping)
-        transferred = prev_X.copy()
-        new_X = self._compose(prev_X, transferred, xl, xu, rng)
-        bclip = 0.0
-        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": bclip,
-                        "n_nd": int(nd_X.shape[0]), "Dk": float(Dk)}
-
-    def _compose(self, prev_X, transferred, xl, xu, rng):
-        N, D = prev_X.shape
-        n_transfer = int(round(self.transfer_ratio * N))
-        n_mut = int(round(self.local_mut_ratio * N))
-        n_imm = int(round(self.immigrant_ratio * N))
-        idx = rng.permutation(N)
-        transfer_part = transferred[idx[:n_transfer]]
-        mut_part = transferred[idx[n_transfer:n_transfer + n_mut]].copy()
-        if mut_part.shape[0] > 0:
-            n_dims = max(1, D // 3)
-            dim_sel = rng.choice(D, size=n_dims, replace=False)
-            mut_part[:, dim_sel] += rng.normal(0, 0.05, size=mut_part.shape)[:, dim_sel]
-            mut_part = np.clip(mut_part, xl, xu)
-        imm_part = rng.uniform(xl, xu, size=(n_imm, D))
-        new_X = np.concatenate([transfer_part, mut_part, imm_part], axis=0)
-        return self._resize(new_X, N, xl, xu, rng)
+    def __init__(self, **kw):
+        super().__init__(retain_ratio=0.0, random_ratio=0.5, **kw)
 
 
 ABLATION_VARIANTS = {
-    "full": LDMTNSGA2,
-    "no_feature_simplification": LDMTNoFeatureSimplification,
-    "no_transfer": LDMTNoTransfer,
+    "full": LDTNSGA2,
+    "ablation_a": LDTAblationA,
+    "ablation_b": LDTAblationB,
+    "ablation_c": LDTAblationC,
 }
 
 
 def run_ablation_variant(variant_name, problem_name, cfg, seed):
     from algorithms import DynamicDriver
-    from experiments.common import problem_factory
     problem = problem_factory(problem_name, tau_t=cfg.tau_t, n_t=cfg.n_t)
     algo = ABLATION_VARIANTS[variant_name]()
     n_envs = max(1, cfg.n_gen // cfg.tau_t)
@@ -152,7 +93,7 @@ def run_ablation_variant(variant_name, problem_name, cfg, seed):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="LDMT-NSGA-II ablation")
+    ap = argparse.ArgumentParser(description="LDT-NSGA-II ablation")
     ap.add_argument("--problems", default="FDA1,FDA3,FDA4")
     ap.add_argument("--tau", type=int, default=25)
     ap.add_argument("--seeds", default="0-29")

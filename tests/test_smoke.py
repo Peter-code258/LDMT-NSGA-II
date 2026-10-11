@@ -1,9 +1,13 @@
-"""Smoke tests: each of the 4 algorithms runs FDA3 for 2 environments."""
+"""Smoke tests: each algorithm runs FDA1 for 2 environments (report 6.5).
+
+Report requirement: each algorithm must complete at least FDA1, N=20,
+2 environments, 100 evaluations per environment end-to-end smoke test.
+"""
 import numpy as np
 import pytest
 
 from problems import FDA3, FDA1, FDA4
-from algorithms import (LDMTNSGA2, ARNSGA2, GMMTransfer, DNSGA2Response,
+from algorithms import (LDTNSGA2, ARNSGA2, GMMTransfer, DNSGA2Response,
                          DynamicDriver)
 
 pytestmark = pytest.mark.smoke
@@ -23,25 +27,29 @@ def _run_smoke(algo, problem_name, problem_cls, tau_t=5, n_envs=2, N=20):
     return rows
 
 
-def test_smoke_dnsga2_fda3():
-    _run_smoke(DNSGA2Response(), "FDA3", FDA3)
+def test_smoke_nsga2_fda1():
+    _run_smoke(DNSGA2Response(), "FDA1", FDA1)
 
 
-def test_smoke_ar_fda3():
-    _run_smoke(ARNSGA2(), "FDA3", FDA3)
+def test_smoke_dnsga2_fda1():
+    _run_smoke(DNSGA2Response(), "FDA1", FDA1)
 
 
-def test_smoke_gmm_fda3():
-    _run_smoke(GMMTransfer(), "FDA3", FDA3)
+def test_smoke_ar1_fda1():
+    _run_smoke(ARNSGA2(), "FDA1", FDA1)
 
 
-def test_smoke_ldmt_fda3():
-    _run_smoke(LDMTNSGA2(), "FDA3", FDA3)
+def test_smoke_gmm_fda1():
+    _run_smoke(GMMTransfer(), "FDA1", FDA1)
 
 
-def test_smoke_ldmt_fda1():
-    _run_smoke(LDMTNSGA2(), "FDA1", FDA1)
+def test_smoke_ldt_fda1():
+    _run_smoke(LDTNSGA2(), "FDA1", FDA1)
 
 
-def test_smoke_ldmt_fda4():
-    _run_smoke(LDMTNSGA2(), "FDA4", FDA4)
+def test_smoke_ldt_fda3():
+    _run_smoke(LDTNSGA2(), "FDA3", FDA3)
+
+
+def test_smoke_ldt_fda4():
+    _run_smoke(LDTNSGA2(), "FDA4", FDA4)
