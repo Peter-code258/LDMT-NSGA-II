@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
+from evaluation.friedman_test import friedman_nemenyi
 
 warnings.filterwarnings("ignore")
 RAW = "results/raw"
@@ -20,15 +21,17 @@ FIG = "results/figures"
 for d in (SUMM, FIG):
     os.makedirs(d, exist_ok=True)
 
-ALGO_ORDER = ["DNSGA2", "AR_NSGA2", "GMM_Transfer", "LDMT_NSGA2"]
+ALGO_ORDER = ["DNSGA2", "AR_NSGA2", "GMM_Transfer", "LDMT_NSGA2", "PPS"]
 ALGO_LABEL = {
     "DNSGA2": "DNSGA-II",
     "AR_NSGA2": "AR-NSGA-II",
     "GMM_Transfer": "GMM-Transfer",
     "LDMT_NSGA2": "LDMT-NSGA-II",
+    "PPS": "PPS",
 }
 COLORS = {"DNSGA2": "#7f7f7f", "AR_NSGA2": "#1f77b4",
-          "GMM_Transfer": "#ff7f0e", "LDMT_NSGA2": "#d62728"}
+          "GMM_Transfer": "#ff7f0e", "LDMT_NSGA2": "#d62728",
+          "PPS": "#2ca02c"}
 
 
 def load(pattern):
@@ -139,7 +142,7 @@ abl = load("ablation_*.csv")
 sens = load("sensitivity_*.csv")
 supp = load("supplementary_*.csv")
 
-report_lines = ["# LDMT-NSGA-II 实验分析报告\n",
+report_lines = ["# LDT-NSGA-II 实验分析报告\n",
                 f"生成于实验完成后。原始数据见 results/raw，汇总见 results/summary，图见 results/figures。\n"]
 
 # ---------- main comparison ----------
@@ -151,7 +154,7 @@ if comp is not None:
     tests = wilcoxon_holm(runs)
     tests.to_csv(os.path.join(SUMM, "statistical_tests.csv"), index=False)
 
-    report_lines.append("## 1. 主对比实验 (FDA1/3/4 × τ_t∈{10,25,50} × 4算法 × 30次)\n")
+    report_lines.append("## 1. 主对比实验 (FDA1/3/4 × τ_t∈{10,25,50} × 5算法 × 30次)\n")
     report_lines.append("MIGD(越小越好)、MHV(越大越好)、变化后MIGD(响应速度)、单代时间、迁移耗时。\n\n")
     report_lines.append("| problem | τ_t | algorithm | MIGD | MHV | postΔMIGD | gen_t(s) | mig_t(s) |")
     report_lines.append("\n|---|---|---|---|---|---|---|---|")
@@ -160,6 +163,80 @@ if comp is not None:
             f"\n| {r['problem']} | {int(r['tau_t'])} | {ALGO_LABEL.get(r['algorithm'], r['algorithm'])} | "
             f"{r['MIGD_mean']:.4f}±{r['MIGD_std']:.4f} | {r['MHV_mean']:.4f}±{r['MHV_std']:.4f} | "
             f"{fmt(r['post_MIGD_mean'])} | {fmt(r['gen_time_mean'],5)} | {fmt(r['mig_time_mean'],5)} |")
+
+    # ---- Friedman + Nemenyi post-hoc (report 2.1: multi-algo multi-problem) ----
+    report_lines.append("\n\n### 1.3 Friedman + Nemenyi 统计检验 (MIGD, 多算法多问题)\n")
+    fried_rows = []
+    for (prob, tau), grp in runs.groupby(["problem", "tau_t"]):
+        pivot = grp.pivot_table(index="seed", columns="algorithm",
+                                values="MIGD")
+        pivot = pivot.dropna()
+        if pivot.shape[0] < 5 or pivot.shape[1] < 2:
+            continue
+        res = friedman_nemenyi(pivot.values, higher_is_better=False)
+        fried_rows.append({
+            "problem": prob, "tau_t": tau,
+            "chi2": res["friedman"]["chi2"],
+            "p_value": res["friedman"]["p_value"],
+            "avg_ranks": res["friedman"]["avg_ranks"],
+            "algorithms": list(pivot.columns),
+            "CD": res["nemenyi"]["critical_difference"],
+            "sig_pairs": res["nemenyi"]["significant_pairs"],
+        })
+        report_lines.append(
+            f"\n| {prob} | τ_t={int(tau)} | χ²={res['friedman']['chi2']:.3f} "
+            f"(p={res['friedman']['p_value']:.4f}) | CD={res['nemenyi']['critical_difference']:.3f} |")
+    if fried_rows:
+        import json as _json
+        def _json_default(o):
+            if isinstance(o, (np.integer,)):
+                return int(o)
+            if isinstance(o, (np.floating,)):
+                return float(o)
+            if isinstance(o, np.ndarray):
+                return o.tolist()
+            return str(o)
+        with open(os.path.join(SUMM, "friedman_results.json"), "w",
+                  encoding="utf-8") as _f:
+            _json.dump(fried_rows, _f, indent=2, ensure_ascii=False,
+                       default=_json_default)
+
+    # ---- recovery-speed metric (report 2.1: generations to recover) ----
+    report_lines.append("\n\n### 1.4 恢复速度分析 (Recovery Generations)\n")
+    report_lines.append("定义: 环境变化后 IGD 恢复到变化前水平的代数 (阈值=变化前最后一代IGD)。\n\n")
+    report_lines.append("| problem | τ_t | algorithm | mean_recovery_gens | std |")
+    report_lines.append("\n|---|---|---|---|---|")
+    rec_rows = []
+    for (prob, tau, algo, seed), grp in comp.groupby(
+            ["problem", "tau_t", "algorithm", "seed"]):
+        envs = sorted(grp["environment_index"].unique())
+        if len(envs) < 2:
+            continue
+        for e in envs[1:]:
+            pre = grp[(grp["environment_index"] == e - 1)]
+            post = grp[(grp["environment_index"] == e)]
+            if pre.empty or post.empty:
+                continue
+            pre_last = pre.loc[pre["generation"].idxmax(), "IGD"]
+            post_first = post.loc[post["generation"].idxmin(), "IGD"]
+            target = pre_last
+            rec = post[post["IGD"] <= target]
+            rec_gens = (rec["generation"].min() - post["generation"].min()
+                        if len(rec) else len(post))
+            rec_rows.append({"problem": prob, "tau_t": tau,
+                             "algorithm": algo, "seed": seed,
+                             "env": e, "recovery_gens": rec_gens})
+    if rec_rows:
+        rec_df = pd.DataFrame(rec_rows)
+        rec_summary = rec_df.groupby(["problem", "tau_t", "algorithm"]).agg(
+            mean_recovery=("recovery_gens", "mean"),
+            std_recovery=("recovery_gens", "std")).reset_index()
+        for _, r in rec_summary.iterrows():
+            report_lines.append(
+                f"\n| {r['problem']} | {int(r['tau_t'])} | {ALGO_LABEL.get(r['algorithm'], r['algorithm'])} | "
+                f"{r['mean_recovery']:.2f} | {r['std_recovery']:.2f} |")
+        rec_df.to_csv(os.path.join(SUMM, "recovery_generations.csv"),
+                      index=False)
 
     # best baseline gap (relative MIGD vs best non-LDMT)
     report_lines.append("\n\n### 1.1 LDMT 相对最佳基线的 MIGD 差距\n")
@@ -200,6 +277,9 @@ if comp is not None:
                 d = sub[(sub["tau_t"] == tau) & (sub["algorithm"] == a)]["MIGD"].values
                 if len(d):
                     data.append(d); labels.append(ALGO_LABEL[a]); cols.append(COLORS[a])
+            if not data:
+                ax.set_title(f"{prob} τ_t={tau} (无数据)")
+                continue
             bp = ax.boxplot(data, labels=labels, patch_artist=True, showfliers=False)
             for patch, c in zip(bp["boxes"], cols):
                 patch.set_facecolor(c); patch.set_alpha(0.7)
@@ -251,9 +331,11 @@ if comp is not None:
         plt.close(fig)
 
     # (4) MIGD vs tau_t (trend with update frequency)
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-    for j, prob in enumerate(sorted(runs["problem"].unique())):
-        ax = axes[j]
+    _probs = sorted(runs["problem"].unique())
+    fig, axes = plt.subplots(1, len(_probs), figsize=(4 * len(_probs) + 1, 4),
+                             squeeze=False)
+    for j, prob in enumerate(_probs):
+        ax = axes[0][j]
         sub = runs[runs["problem"] == prob]
         for a in ALGO_ORDER:
             d = sub[sub["algorithm"] == a].groupby("tau_t")["MIGD"].mean()
@@ -275,7 +357,7 @@ if abl is not None:
     sa = summarize(runs_a)
     sa.to_csv(os.path.join(SUMM, "ablation_summary.csv"), index=False)
     report_lines.append("\n## 2. 消融实验 (FDA1/3/4, τ_t=25, 30次)\n")
-    report_lines.append("变体: full(完整LDMT) / no_feature(改用GMM特征) / no_transfer(去迁移映射)。\n\n")
+    report_lines.append("变体: full(完整LDT) / ablation_a(关闭趋势) / ablation_b(关闭分布迁移) / ablation_c(κ=0)。\n\n")
     report_lines.append("| problem | variant | MIGD | MHV | mig_t(s) |")
     report_lines.append("\n|---|---|---|---|---|")
     for _, r in sa.iterrows():
@@ -286,11 +368,11 @@ if abl is not None:
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
     for j, prob in enumerate(sorted(runs_a["problem"].unique())):
         ax = axes[j]; sub = runs_a[runs_a["problem"] == prob]
-        order = ["full", "LDMT_no_feature", "LDMT_no_transfer"]
+        order = ["full", "ablation_a", "ablation_b", "ablation_c"]
         data = [sub[sub["algorithm"] == v]["MIGD"].values for v in order]
-        bp = ax.boxplot(data, labels=["full", "no_feature", "no_transfer"],
+        bp = ax.boxplot(data, labels=["full", "no_trend", "no_transfer", "kappa0"],
                         patch_artist=True, showfliers=False)
-        for patch, c in zip(bp["boxes"], ["#d62728", "#ff7f0e", "#7f7f7f"]):
+        for patch, c in zip(bp["boxes"], ["#d62728", "#ff7f0e", "#1f77b4", "#7f7f7f"]):
             patch.set_facecolor(c); patch.set_alpha(0.7)
         ax.set_title(prob); ax.set_ylabel("MIGD")
     fig.suptitle("消融实验: MIGD")
@@ -302,8 +384,8 @@ else:
 if sens is not None:
     runs_s = per_run_metrics(sens)
     runs_s.to_csv(os.path.join(SUMM, "sensitivity_runs.csv"), index=False)
-    report_lines.append("\n## 3. 参数敏感性 (FDA3, LDMT, 30次)\n")
-    report_lines.append("(a) 种群规模 N∈{50,100,150}; (b) 变化幅度 n_t∈{10,20,40}。\n\n")
+    report_lines.append("\n## 3. 参数敏感性 (FDA1/3/4, LDT, 30次)\n")
+    report_lines.append("扫描: N∈{50,100,200}; n_t∈{10,20,40}; ρ∈{0.25,0.5,0.75}; α∈{0,0.25,0.5,0.75,1.0}。\n\n")
     report_lines.append("| study | value | MIGD | MHV |")
     report_lines.append("\n|---|---|---|---|")
     # derive study/value from filename not stored -> approximate by N and n_t
@@ -320,7 +402,7 @@ if sens is not None:
     if len(snt):
         axes[1].plot(snt.index, snt.values, "o-", color="#1f77b4")
         axes[1].set_title("n_t 敏感性 (N=100)"); axes[1].set_xlabel("n_t"); axes[1].set_ylabel("MIGD"); axes[1].grid(alpha=0.3)
-    fig.suptitle("参数敏感性 (FDA3, LDMT)")
+    fig.suptitle("参数敏感性 (FDA1/3/4, LDT)")
     fig.tight_layout(); fig.savefig(os.path.join(FIG, "sensitivity.png"), dpi=120); plt.close(fig)
 else:
     report_lines.append("\n## 3. 参数敏感性: 未找到 sensitivity_*.csv\n")
@@ -331,7 +413,7 @@ if supp is not None:
     runs_u.to_csv(os.path.join(SUMM, "supplementary_runs.csv"), index=False)
     su = summarize(runs_u)
     su.to_csv(os.path.join(SUMM, "supplementary_summary.csv"), index=False)
-    report_lines.append("\n## 4. 补充实验 (dMOP1/2, τ_t=25, 4算法, 30次)\n\n")
+    report_lines.append("\n## 4. 补充实验 (dMOP1/2/3, τ_t=25, 6算法, 30次)\n\n")
     report_lines.append("| problem | algorithm | MIGD | MHV | mig_t(s) |")
     report_lines.append("\n|---|---|---|---|---|")
     for _, r in su.iterrows():

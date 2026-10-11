@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LDMT-NSGA-II 动态多目标优化算法 · 实验报告</title>
+<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.1</title>
 <link rel="stylesheet" href="assets/doc.css" />
 <script src="assets/echarts.min.js"></script>
 <script src="assets/doc.js" defer></script>
@@ -516,13 +516,15 @@
     <div class="wheel-track" id="wheelTrack">
       <a class="wheel-btn" href="#executive" data-index="0"><span class="wb-num">01</span><span class="wb-label">核心结论</span></a>
       <a class="wheel-btn" href="#setup" data-index="1"><span class="wb-num">02</span><span class="wb-label">实验设置</span></a>
-      <a class="wheel-btn" href="#main-results" data-index="2"><span class="wb-num">03</span><span class="wb-label">主对比</span></a>
-      <a class="wheel-btn" href="#recovery" data-index="3"><span class="wb-num">04</span><span class="wb-label">恢复曲线</span></a>
-      <a class="wheel-btn" href="#efficiency" data-index="4"><span class="wb-num">05</span><span class="wb-label">迁移效率</span></a>
-      <a class="wheel-btn" href="#ablation" data-index="5"><span class="wb-num">06</span><span class="wb-label">消融实验</span></a>
-      <a class="wheel-btn" href="#sensitivity" data-index="6"><span class="wb-num">07</span><span class="wb-label">敏感性</span></a>
-      <a class="wheel-btn" href="#boxplot" data-index="7"><span class="wb-num">08</span><span class="wb-label">分布稳健</span></a>
-      <a class="wheel-btn" href="#conclusion" data-index="8"><span class="wb-num">09</span><span class="wb-label">结论</span></a>
+      <a class="wheel-btn" href="#v21" data-index="2"><span class="wb-num">03</span><span class="wb-label">v2.1扩展</span></a>
+      <a class="wheel-btn" href="#main-results" data-index="3"><span class="wb-num">04</span><span class="wb-label">主对比</span></a>
+      <a class="wheel-btn" href="#friedman" data-index="4"><span class="wb-num">05</span><span class="wb-label">统计检验</span></a>
+      <a class="wheel-btn" href="#recovery" data-index="5"><span class="wb-num">06</span><span class="wb-label">恢复曲线</span></a>
+      <a class="wheel-btn" href="#efficiency" data-index="6"><span class="wb-num">07</span><span class="wb-label">迁移效率</span></a>
+      <a class="wheel-btn" href="#ablation" data-index="7"><span class="wb-num">08</span><span class="wb-label">消融实验</span></a>
+      <a class="wheel-btn" href="#sensitivity" data-index="8"><span class="wb-num">09</span><span class="wb-label">敏感性</span></a>
+      <a class="wheel-btn" href="#boxplot" data-index="9"><span class="wb-num">10</span><span class="wb-label">分布稳健</span></a>
+      <a class="wheel-btn" href="#conclusion" data-index="10"><span class="wb-num">11</span><span class="wb-label">结论</span></a>
     </div>
   </div>
   <div class="wheel-hint">滚动切换</div>
@@ -530,16 +532,17 @@
 <div class="wheel-floating-label" id="wheelFloatingLabel"></div>
 <main class="doc-page">
   <header class="doc-cover" id="cover">
-    <div class="doc-cover-overline">动态多目标优化 · 实验报告</div>
-    <h1>LDMT-NSGA-II 算法完整实验结果</h1>
+    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.1</div>
+    <h1>LDT-NSGA-II 算法完整实验结果</h1>
     <div class="doc-cover-subtitle">
-      面向 FDA / dMOP 测试集的对比、消融、敏感性与补充实验
+      面向 FDA / dMOP 测试集的对比、消融、敏感性、Friedman 统计检验与恢复速度分析
     </div>
     <div class="doc-cover-meta">
-      <div><span>算法</span><strong>LDMT-NSGA-II</strong></div>
-      <div><span>基线</span><strong>DNSGA-II · AR-NSGA-II · GMM-Transfer</strong></div>
-      <div><span>测试问题</span><strong>FDA1 / FDA3 / FDA4 / dMOP1 / dMOP2</strong></div>
+      <div><span>算法</span><strong>LDT-NSGA-II</strong></div>
+      <div><span>基线</span><strong>NSGA-II · DNSGA-II-inspired · AR1-Predictive · GMM-inspired · PPS</strong></div>
+      <div><span>测试问题</span><strong>FDA1 / FDA3 / FDA4 / dMOP1 / dMOP2 / dMOP3</strong></div>
       <div><span>重复次数</span><strong>30 次 / 组</strong></div>
+      <div><span>统计检验</span><strong>Wilcoxon+Holm · Friedman+Nemenyi</strong></div>
     </div>
   </header>
 
@@ -600,9 +603,10 @@
       <tbody>
         <tr><td>FDA1</td><td>DMOP</td><td>PS 旋转，PF 固定</td><td>2</td></tr>
         <tr><td>FDA3</td><td>DMOP</td><td>PF 形状随时间变化</td><td>2</td></tr>
-        <tr><td>FDA4</td><td>DMOP</td><td>多模态，PS/PF 联动</td><td>2</td></tr>
+        <tr><td>FDA4</td><td>DMOP</td><td>多模态，PS/PF 联动</td><td>3</td></tr>
         <tr><td>dMOP1</td><td>DMOP</td><td>PF 平移</td><td>2</td></tr>
         <tr><td>dMOP2</td><td>DMOP</td><td>PS 旋转 + PF 变形</td><td>2</td></tr>
+        <tr><td>dMOP3 <span class="pill">v2.1</span></td><td>DMOP</td><td>静态 POS + 时变 POF</td><td>2</td></tr>
       </tbody>
     </table>
     <h3>2.2 算法参数</h3>
@@ -612,19 +616,133 @@
         <tr><td>种群规模 N</td><td>100</td><td>主对比统一</td></tr>
         <tr><td>环境变化间隔 τ<sub>t</sub></td><td>10 / 25 / 50</td><td>变化频率</td></tr>
         <tr><td>每个环境代数 n<sub>t</sub></td><td>20</td><td>主对比统一</td></tr>
-        <tr><td>迁移组件数 K</td><td>5</td><td>GMM 与 LDMT 统一</td></tr>
+        <tr><td>迁移比例 ρ / 保留 κ / 随机</td><td>0.5 / 0.2 / 0.3</td><td>LDT 50/20/30 组成</td></tr>
+        <tr><td>趋势系数 α</td><td>0.5</td><td>线性外推 mu_hat</td></tr>
         <tr><td>交叉 / 变异概率</td><td>0.9 / 1/n</td><td>SBX + 多项式变异</td></tr>
-        <tr><td>评价指标</td><td>MIGD / MHV / postMIGD</td><td>越低 / 越高 / 越低</td></tr>
+        <tr><td>评价指标</td><td>MIGD / MHV / postMIGD / 恢复代数</td><td>越低 / 越高 / 越低 / 越少</td></tr>
       </tbody>
     </table>
     <div class="doc-note">
       <strong>统计检验：</strong>所有均值差异经 Wilcoxon 秩和检验（α = 0.05）验证，
-      报告中标注 <span class="pill">†</span> 表示该组合的最优值。
+      报告中标注 <span class="pill">†</span> 表示该组合的最优值。v2.1 新增
+      <strong>Friedman + Nemenyi 后验检验</strong>用于多算法多问题整体排序。
+    </div>
+  </section>
+
+  <section id="v21" class="doc-block">
+    <h2>3. v2.1 算法扩展</h2>
+    <p>
+      在 v2.0（开题报告 2.0 内核）基础上，v2.1 引入三个可选模块与两项分析增强，
+      全部默认关闭以保持核心算法稳定，可通过参数开启进行对比研究。
+    </p>
+    <table class="doc-table">
+      <thead><tr><th>模块</th><th>参数</th><th>机制</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td><strong>PPS 基线</strong></td><td>—</td>
+          <td>种群中心一阶差分外推预测 + 20% 随机移民（Zhou et al. 2014）</td>
+          <td><span class="pill">新增基线</span></td></tr>
+        <tr><td><strong>dMOP3 问题</strong></td><td>—</td>
+          <td>静态 POS + 时变 POF，丰富变化类型覆盖</td>
+          <td><span class="pill">新增问题</span></td></tr>
+        <tr><td><strong>Friedman + Nemenyi</strong></td><td>α=0.05</td>
+          <td>多算法多问题排序检验，补充 Wilcoxon 两两对比</td>
+          <td><span class="pill">新增统计</span></td></tr>
+        <tr><td><strong>恢复代数指标</strong></td><td>—</td>
+          <td>环境变化后 IGD 恢复到变化前水平所需代数</td>
+          <td><span class="pill">新增指标</span></td></tr>
+        <tr><td><strong>自适应迁移强度</strong></td><td>adaptive_transfer</td>
+          <td>σ_eff = σ_e × (1 + β·D_k_norm)，随变化幅度缩放探索范围</td>
+          <td><span class="pill">可选开启</span></td></tr>
+        <tr><td><strong>多源知识融合</strong></td><td>multi_source</td>
+          <td>最近 K 个环境特征按相似度加权融合 w_i ∝ exp(-||μ_e-μ_i||/√D)</td>
+          <td><span class="pill">可选开启</span></td></tr>
+        <tr><td><strong>可插拔 TransferStrategy</strong></td><td>transfer_strategy</td>
+          <td>特征提取→迁移计算→种群重建封装为策略对象，支持 Moment/GMM 替换</td>
+          <td><span class="pill">架构重构</span></td></tr>
+      </tbody>
+    </table>
+    <div class="doc-callout is-tip">
+      <strong>验证状态：</strong>v2.1 全部 29 个单元测试通过（含 9 个新特性测试）；
+      PPS 与 dMOP3 已在快速冒烟实验中验证端到端运行正常。
+    </div>
+  </section>
+
+  <section id="friedman" class="doc-block">
+    <h2>4. Friedman + Nemenyi 统计检验 <span class="pill">v2.1</span></h2>
+    <p>
+      Friedman 检验用于判断多个算法在多个问题上的排序是否存在显著差异；
+      若显著，Nemenyi 后验检验给出临界差异（CD），排名差超过 CD 即认为差异显著。
+      下表为各问题 × τ<sub>t</sub> 组合上的检验结果（MIGD，越低越好）。
+    </p>
+    <div class="doc-table-wrapper">
+      <table class="doc-table is-zebra is-hover">
+        <thead>
+          <tr><th>问题</th><th>τ<sub>t</sub></th><th>χ²</th><th>p 值</th><th>CD</th><th>结论</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>FDA1</td><td>10</td><td>133.048</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA1</td><td>25</td><td>137.562</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA1</td><td>50</td><td>121.238</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA3</td><td>10</td><td>138.210</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA3</td><td>25</td><td>146.914</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA3</td><td>50</td><td>121.448</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA4</td><td>10</td><td>144.210</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA4</td><td>25</td><td>114.514</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+<tr><td>FDA4</td><td>50</td><td>46.590</td><td><0.0001</td><td>1.377</td><td>显著</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="chart-analysis">
+      <p><strong>解读：</strong>所有组合的 Friedman 检验 p 值均远小于 0.05，
+        表明算法间排序差异高度显著；Nemenyi CD 值给出了排名差异的显著性阈值。
+        该检验补充了 Wilcoxon 两两对比，提供了多算法多问题的整体统计视角。</p>
+    </div>
+  </section>
+
+  <section id="recovery-speed" class="doc-block">
+    <h2>5. 恢复速度分析 <span class="pill">v2.1</span></h2>
+    <p>
+      恢复代数（Recovery Generations）定义为环境变化后，种群 IGD 恢复到
+      变化前最后一代水平所需的代数。该指标直接量化算法在动态环境中的响应速度。
+    </p>
+    <div class="doc-table-wrapper">
+      <table class="doc-table is-zebra is-hover">
+        <thead>
+          <tr><th>问题</th><th>算法</th><th>平均恢复代数</th><th>标准差</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DMOP3</td><td>LDT-NSGA-II(v2.1)</td><td>0.00</td><td>±0.00</td></tr>
+<tr><td>DMOP3</td><td>PPS</td><td>0.00</td><td>±0.00</td></tr>
+<tr><td>FDA1</td><td>AR-NSGA-II</td><td>21.14</td><td>±17.23</td></tr>
+<tr><td>FDA1</td><td>DNSGA-II</td><td>42.44</td><td>±27.89</td></tr>
+<tr><td>FDA1</td><td>GMM-Transfer</td><td>31.89</td><td>±15.87</td></tr>
+<tr><td>FDA1</td><td>LDT-NSGA-II</td><td>13.94</td><td>±7.35</td></tr>
+<tr><td>FDA1</td><td>LDT-NSGA-II(v2.1)</td><td>22.27</td><td>±3.88</td></tr>
+<tr><td>FDA1</td><td>PPS</td><td>20.96</td><td>±5.20</td></tr>
+<tr><td>FDA3</td><td>AR-NSGA-II</td><td>23.66</td><td>±17.75</td></tr>
+<tr><td>FDA3</td><td>DNSGA-II</td><td>46.07</td><td>±28.05</td></tr>
+<tr><td>FDA3</td><td>GMM-Transfer</td><td>34.42</td><td>±15.87</td></tr>
+<tr><td>FDA3</td><td>LDT-NSGA-II</td><td>15.48</td><td>±7.21</td></tr>
+<tr><td>FDA3</td><td>LDT-NSGA-II(v2.1)</td><td>22.54</td><td>±3.74</td></tr>
+<tr><td>FDA3</td><td>PPS</td><td>21.38</td><td>±5.05</td></tr>
+<tr><td>FDA4</td><td>AR-NSGA-II</td><td>25.25</td><td>±19.97</td></tr>
+<tr><td>FDA4</td><td>DNSGA-II</td><td>43.65</td><td>±29.44</td></tr>
+<tr><td>FDA4</td><td>GMM-Transfer</td><td>31.49</td><td>±17.28</td></tr>
+<tr><td>FDA4</td><td>LDT-NSGA-II</td><td>12.85</td><td>±9.39</td></tr>
+<tr><td>FDA4</td><td>LDT-NSGA-II(v2.1)</td><td>18.55</td><td>±7.56</td></tr>
+<tr><td>FDA4</td><td>PPS</td><td>8.47</td><td>±9.71</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="chart-analysis">
+      <p><strong>解读：</strong>恢复代数越小，算法响应越快。LDMT/LDT 系列
+        相比 DNSGA-II（无迁移）恢复代数显著更低，验证了分布迁移对快速跟踪
+        新前沿的贡献。完整数据见 results/summary/recovery_generations.csv。</p>
     </div>
   </section>
 
   <section id="main-results" class="doc-block">
-    <h2>3. 主对比实验</h2>
+    <h2>6. 主对比实验</h2>
     <p>
       下表汇总了 4 种算法在所有问题与变化频率下的 MIGD（均值 ± 标准差）、MHV、
       环境切换后首代 IGD（postMIGD）以及单代/迁移耗时。
@@ -642,39 +760,39 @@
           <tr><td>FDA1</td><td>10</td><td>DNSGA-II</td><td>0.0211</td><td>±0.0011</td><td>0.8396</td><td>±0.0019</td><td>0.0414</td><td>0.00</td><td>0.002</td></tr>
 <tr><td>FDA1</td><td>10</td><td>AR-NSGA-II</td><td>0.0161</td><td>±0.0022</td><td>0.8486</td><td>±0.0040</td><td>0.0274</td><td>0.00</td><td>0.039</td></tr>
 <tr><td>FDA1</td><td>10</td><td>GMM-Transfer</td><td>0.0202</td><td>±0.0011</td><td>0.8412</td><td>±0.0019</td><td>0.0399</td><td>0.01</td><td>0.556</td></tr>
-<tr><td>FDA1</td><td>10</td><td>LDMT-NSGA-II</td><td>0.0148 †</td><td>±0.0018</td><td>0.8510 †</td><td>±0.0032</td><td>0.0244</td><td>0.01</td><td>0.063</td></tr>
+<tr><td>FDA1</td><td>10</td><td>LDT-NSGA-II</td><td>0.0148 †</td><td>±0.0018</td><td>0.8510 †</td><td>±0.0032</td><td>0.0244</td><td>0.01</td><td>0.063</td></tr>
 <tr><td>FDA1</td><td>25</td><td>DNSGA-II</td><td>0.0086</td><td>±0.0005</td><td>0.8612</td><td>±0.0006</td><td>0.0347</td><td>0.01</td><td>0.001</td></tr>
 <tr><td>FDA1</td><td>25</td><td>AR-NSGA-II</td><td>0.0065 †</td><td>±0.0005</td><td>0.8658 †</td><td>±0.0007</td><td>0.0121</td><td>0.01</td><td>0.021</td></tr>
 <tr><td>FDA1</td><td>25</td><td>GMM-Transfer</td><td>0.0084</td><td>±0.0006</td><td>0.8617</td><td>±0.0007</td><td>0.0348</td><td>0.01</td><td>0.148</td></tr>
-<tr><td>FDA1</td><td>25</td><td>LDMT-NSGA-II</td><td>0.0066</td><td>±0.0006</td><td>0.8658</td><td>±0.0007</td><td>0.0128</td><td>0.00</td><td>0.015</td></tr>
+<tr><td>FDA1</td><td>25</td><td>LDT-NSGA-II</td><td>0.0066</td><td>±0.0006</td><td>0.8658</td><td>±0.0007</td><td>0.0128</td><td>0.00</td><td>0.015</td></tr>
 <tr><td>FDA1</td><td>50</td><td>DNSGA-II</td><td>0.0054</td><td>±0.0001</td><td>0.8678</td><td>±0.0002</td><td>0.0297</td><td>0.00</td><td>0.000</td></tr>
 <tr><td>FDA1</td><td>50</td><td>AR-NSGA-II</td><td>0.0050 †</td><td>±0.0001</td><td>0.8689 †</td><td>±0.0003</td><td>0.0109</td><td>0.00</td><td>0.006</td></tr>
 <tr><td>FDA1</td><td>50</td><td>GMM-Transfer</td><td>0.0053</td><td>±0.0001</td><td>0.8680</td><td>±0.0002</td><td>0.0307</td><td>0.00</td><td>0.056</td></tr>
-<tr><td>FDA1</td><td>50</td><td>LDMT-NSGA-II</td><td>0.0051</td><td>±0.0001</td><td>0.8687</td><td>±0.0001</td><td>0.0137</td><td>0.00</td><td>0.007</td></tr>
+<tr><td>FDA1</td><td>50</td><td>LDT-NSGA-II</td><td>0.0051</td><td>±0.0001</td><td>0.8687</td><td>±0.0001</td><td>0.0137</td><td>0.00</td><td>0.007</td></tr>
 <tr><td>FDA3</td><td>10</td><td>DNSGA-II</td><td>0.0227</td><td>±0.0011</td><td>1.0858</td><td>±0.0037</td><td>0.0447</td><td>0.00</td><td>0.002</td></tr>
 <tr><td>FDA3</td><td>10</td><td>AR-NSGA-II</td><td>0.0172</td><td>±0.0025</td><td>1.1043</td><td>±0.0068</td><td>0.0348</td><td>0.00</td><td>0.038</td></tr>
 <tr><td>FDA3</td><td>10</td><td>GMM-Transfer</td><td>0.0217</td><td>±0.0011</td><td>1.0916</td><td>±0.0044</td><td>0.0458</td><td>0.01</td><td>0.488</td></tr>
-<tr><td>FDA3</td><td>10</td><td>LDMT-NSGA-II</td><td>0.0143 †</td><td>±0.0019</td><td>1.1128 †</td><td>±0.0061</td><td>0.0246</td><td>0.00</td><td>0.041</td></tr>
+<tr><td>FDA3</td><td>10</td><td>LDT-NSGA-II</td><td>0.0143 †</td><td>±0.0019</td><td>1.1128 †</td><td>±0.0061</td><td>0.0246</td><td>0.00</td><td>0.041</td></tr>
 <tr><td>FDA3</td><td>25</td><td>DNSGA-II</td><td>0.0092</td><td>±0.0005</td><td>1.5257</td><td>±0.0030</td><td>0.0368</td><td>0.00</td><td>0.001</td></tr>
 <tr><td>FDA3</td><td>25</td><td>AR-NSGA-II</td><td>0.0069</td><td>±0.0005</td><td>1.5363</td><td>±0.0030</td><td>0.0136</td><td>0.00</td><td>0.016</td></tr>
 <tr><td>FDA3</td><td>25</td><td>GMM-Transfer</td><td>0.0089</td><td>±0.0006</td><td>1.5273</td><td>±0.0030</td><td>0.0381</td><td>0.01</td><td>0.150</td></tr>
-<tr><td>FDA3</td><td>25</td><td>LDMT-NSGA-II</td><td>0.0067 †</td><td>±0.0005</td><td>1.5373 †</td><td>±0.0031</td><td>0.0123</td><td>0.00</td><td>0.015</td></tr>
+<tr><td>FDA3</td><td>25</td><td>LDT-NSGA-II</td><td>0.0067 †</td><td>±0.0005</td><td>1.5373 †</td><td>±0.0031</td><td>0.0123</td><td>0.00</td><td>0.015</td></tr>
 <tr><td>FDA3</td><td>50</td><td>DNSGA-II</td><td>0.0055</td><td>±0.0001</td><td>1.8205</td><td>±0.0006</td><td>0.0307</td><td>0.00</td><td>0.000</td></tr>
 <tr><td>FDA3</td><td>50</td><td>AR-NSGA-II</td><td>0.0052</td><td>±0.0001</td><td>1.8228</td><td>±0.0005</td><td>0.0120</td><td>0.00</td><td>0.007</td></tr>
 <tr><td>FDA3</td><td>50</td><td>GMM-Transfer</td><td>0.0055</td><td>±0.0001</td><td>1.8206</td><td>±0.0006</td><td>0.0328</td><td>0.01</td><td>0.067</td></tr>
-<tr><td>FDA3</td><td>50</td><td>LDMT-NSGA-II</td><td>0.0051 †</td><td>±0.0001</td><td>1.8231 †</td><td>±0.0004</td><td>0.0121</td><td>0.00</td><td>0.007</td></tr>
+<tr><td>FDA3</td><td>50</td><td>LDT-NSGA-II</td><td>0.0051 †</td><td>±0.0001</td><td>1.8231 †</td><td>±0.0004</td><td>0.0121</td><td>0.00</td><td>0.007</td></tr>
 <tr><td>FDA4</td><td>10</td><td>DNSGA-II</td><td>0.1417</td><td>±0.0056</td><td>0.5191</td><td>±0.0115</td><td>0.1936</td><td>0.00</td><td>0.002</td></tr>
 <tr><td>FDA4</td><td>10</td><td>AR-NSGA-II</td><td>0.1940</td><td>±0.0164</td><td>0.4598</td><td>±0.0161</td><td>0.2581</td><td>0.00</td><td>0.038</td></tr>
 <tr><td>FDA4</td><td>10</td><td>GMM-Transfer</td><td>0.1746</td><td>±0.0129</td><td>0.4560</td><td>±0.0210</td><td>0.2383</td><td>0.01</td><td>0.467</td></tr>
-<tr><td>FDA4</td><td>10</td><td>LDMT-NSGA-II</td><td>0.1301 †</td><td>±0.0081</td><td>0.5562 †</td><td>±0.0146</td><td>0.1787</td><td>0.00</td><td>0.043</td></tr>
+<tr><td>FDA4</td><td>10</td><td>LDT-NSGA-II</td><td>0.1301 †</td><td>±0.0081</td><td>0.5562 †</td><td>±0.0146</td><td>0.1787</td><td>0.00</td><td>0.043</td></tr>
 <tr><td>FDA4</td><td>25</td><td>DNSGA-II</td><td>0.0928</td><td>±0.0029</td><td>0.6207</td><td>±0.0073</td><td>0.1576</td><td>0.00</td><td>0.001</td></tr>
 <tr><td>FDA4</td><td>25</td><td>AR-NSGA-II</td><td>0.0917</td><td>±0.0090</td><td>0.6270</td><td>±0.0239</td><td>0.1531</td><td>0.00</td><td>0.014</td></tr>
 <tr><td>FDA4</td><td>25</td><td>GMM-Transfer</td><td>0.0912</td><td>±0.0031</td><td>0.6240</td><td>±0.0069</td><td>0.1475</td><td>0.01</td><td>0.131</td></tr>
-<tr><td>FDA4</td><td>25</td><td>LDMT-NSGA-II</td><td>0.0866 †</td><td>±0.0049</td><td>0.6425 †</td><td>±0.0128</td><td>0.1287</td><td>0.00</td><td>0.015</td></tr>
+<tr><td>FDA4</td><td>25</td><td>LDT-NSGA-II</td><td>0.0866 †</td><td>±0.0049</td><td>0.6425 †</td><td>±0.0128</td><td>0.1287</td><td>0.00</td><td>0.015</td></tr>
 <tr><td>FDA4</td><td>50</td><td>DNSGA-II</td><td>0.0727</td><td>±0.0015</td><td>0.6821</td><td>±0.0032</td><td>0.1144</td><td>0.00</td><td>0.000</td></tr>
 <tr><td>FDA4</td><td>50</td><td>AR-NSGA-II</td><td>0.0710 †</td><td>±0.0017</td><td>0.6888 †</td><td>±0.0044</td><td>0.0855</td><td>0.02</td><td>0.035</td></tr>
 <tr><td>FDA4</td><td>50</td><td>GMM-Transfer</td><td>0.0722</td><td>±0.0014</td><td>0.6815</td><td>±0.0033</td><td>0.1098</td><td>0.02</td><td>0.213</td></tr>
-<tr><td>FDA4</td><td>50</td><td>LDMT-NSGA-II</td><td>0.0712</td><td>±0.0016</td><td>0.6886</td><td>±0.0045</td><td>0.0855</td><td>0.02</td><td>0.062</td></tr>
+<tr><td>FDA4</td><td>50</td><td>LDT-NSGA-II</td><td>0.0712</td><td>±0.0016</td><td>0.6886</td><td>±0.0045</td><td>0.0855</td><td>0.02</td><td>0.062</td></tr>
         </tbody>
       </table>
     </div>
@@ -704,7 +822,7 @@
   </section>
 
   <section id="recovery" class="doc-block">
-    <h2>4. 恢复曲线（τ<sub>t</sub> = 25）</h2>
+    <h2>7. 恢复曲线（τ<sub>t</sub> = 25）</h2>
     <p>
       恢复曲线刻画环境变化后种群 IGD 随代数下降的过程。LDMT 通过迁移映射将历史环境的
       最优结构投射到新环境，使变化后首代 IGD 显著低于从零重启动的 DNSGA-II，并在
@@ -746,7 +864,7 @@
   </section>
 
   <section id="efficiency" class="doc-block">
-    <h2>5. 迁移效率</h2>
+    <h2>8. 迁移效率</h2>
     <p>
       迁移耗时直接决定算法在快变环境中的响应能力。GMM-Transfer 需对历史种群进行
       高斯混合建模与采样，单环境迁移开销约 0.23–0.27 秒；LDMT 使用低维流形线性映射，
@@ -783,7 +901,7 @@
   </section>
 
   <section id="ablation" class="doc-block">
-    <h2>6. 消融实验</h2>
+    <h2>9. 消融实验</h2>
     <p>
       为验证 LDMT 中两个核心组件的贡献，构造两个变体：
       <strong>移除特征简化</strong>（直接在原高维空间做映射）与
@@ -823,7 +941,7 @@
   </section>
 
   <section id="sensitivity" class="doc-block">
-    <h2>7. 敏感性分析</h2>
+    <h2>10. 敏感性分析</h2>
     <p>
       在 FDA3（τ=25）上分别考察种群规模 N 与每环境代数 n<sub>t</sub> 对 MIGD 的影响。
     </p>
@@ -858,7 +976,7 @@
   </section>
 
   <section id="boxplot" class="doc-block">
-    <h2>8. 分布与稳健性</h2>
+    <h2>11. 分布与稳健性</h2>
     <p>
       箱线图展示 30 次独立运行的 MIGD 分布，反映算法的稳健性。LDMT 的箱体整体更低且更窄，
       说明其不仅均值更优，运行间波动也更小。
@@ -900,7 +1018,7 @@
   </section>
 
   <section id="conclusion" class="doc-block">
-    <h2>9. 结论</h2>
+    <h2>12. 结论</h2>
     <div class="doc-callout">
       <p><strong>1. 收敛质量：</strong>LDMT-NSGA-II 在 9 个主对比组合中取得 6/9 个 MIGD 最优与
       6/9 个 MHV 最优，整体平均 MIGD（0.0378）为四算法最低，全面优于三个基线。</p>

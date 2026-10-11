@@ -7,9 +7,9 @@ from typing import List, Optional
 
 import numpy as np
 
-from problems import FDA1, FDA3, FDA4, DMOP1, DMOP2
+from problems import FDA1, FDA3, FDA4, DMOP1, DMOP2, DMOP3
 from algorithms import (DNSGA2Response, ARNSGA2, GMMTransfer, LDTNSGA2,
-                         DynamicDriver)
+                         PPSNSGA2, DynamicDriver)
 
 PROBLEM_REGISTRY = {
     "FDA1": FDA1,
@@ -17,6 +17,7 @@ PROBLEM_REGISTRY = {
     "FDA4": FDA4,
     "DMOP1": DMOP1,
     "DMOP2": DMOP2,
+    "DMOP3": DMOP3,
 }
 
 ALGORITHM_REGISTRY = {
@@ -25,6 +26,7 @@ ALGORITHM_REGISTRY = {
     "AR1-Predictive": ARNSGA2,
     "GMM-inspired": GMMTransfer,
     "LDT-NSGA-II": LDTNSGA2,
+    "PPS": PPSNSGA2,  # population prediction strategy baseline
     # backward-compatible aliases
     "DNSGA2": DNSGA2Response,
     "AR_NSGA2": ARNSGA2,

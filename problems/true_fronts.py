@@ -49,6 +49,12 @@ def _pf_dmop2(t, P):
     return np.column_stack([u, f2])
 
 
+def _pf_dmop3(P):
+    u = np.linspace(0.0, 1.0, P)
+    f2 = 1.0 - np.sqrt(u) - u * np.sin(10.0 * np.pi * u)
+    return np.column_stack([u, f2])
+
+
 def get_true_pf(problem_name, M=None, n_points=500, t=None):
     """Return the (P, M) reference Pareto front for a problem.
 
@@ -57,7 +63,7 @@ def get_true_pf(problem_name, M=None, n_points=500, t=None):
     """
     name = problem_name.upper()
     if M is None:
-        M = 2 if name in ("FDA1", "FDA3", "DMOP1", "DMOP2") else 3
+        M = 2 if name in ("FDA1", "FDA3", "DMOP1", "DMOP2", "DMOP3") else 3
     t_bucket = None if t is None else round(float(t), 6)
     key = (name, M, int(n_points), t_bucket)
     if key in _CACHE:
@@ -75,6 +81,8 @@ def get_true_pf(problem_name, M=None, n_points=500, t=None):
     elif name == "DMOP2":
         tt = 0.0 if t is None else float(t)
         pf = _pf_dmop2(tt, n_points)
+    elif name == "DMOP3":
+        pf = _pf_dmop3(n_points)
     else:
         raise ValueError(f"Unknown problem name: {problem_name}")
 
