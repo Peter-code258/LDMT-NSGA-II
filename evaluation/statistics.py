@@ -38,17 +38,61 @@ def _summarize_plain(df, metrics):  # pragma: no cover
     return [{"_note": "pandas not available", "n": len(df)}]
 
 
-def wilcoxon_holm(df, metric_col, group_col="algorithm", reference=None):
-    """Pairwise Wilcoxon rank-sum tests with Holm correction.
+def holm_adjust(p_values):
+    """Holm step-down adjustment (v2.2, P1-3.2).
 
-    Returns a list of dicts: {A, B, p_value, Holm_adjusted_p, significant}.
-    ``reference`` (optional) limits comparisons to (algo vs reference).
+    Sorts p-values ascending, multiplies by (m - rank), applies a running
+    maximum, truncates at 1.0, and maps back to the ORIGINAL order.
+
+    Parameters
+    ----------
+    p_values : sequence of floats (finite, in [0, 1])
+
+    Returns
+    -------
+    list of adjusted p-values in the original order.
+    """
+    p = np.asarray(list(p_values), dtype=float)
+    m = len(p)
+    if m == 0:
+        return []
+    order = np.argsort(p)               # ascending
+    adjusted_sorted = np.empty(m, dtype=float)
+    running_max = 0.0
+    for rank, idx in enumerate(order):
+        candidate = (m - rank) * p[idx]
+        running_max = max(running_max, candidate)
+        adjusted_sorted[rank] = min(1.0, running_max)
+    # map back to original order
+    adjusted = np.empty(m, dtype=float)
+    adjusted[order] = adjusted_sorted
+    return adjusted.tolist()
+
+
+def wilcoxon_holm(df, metric_col, group_col="algorithm", reference=None,
+                  paired=True, seed_col="seed"):
+    """Pairwise Wilcoxon tests with Holm correction (v2.2, P1-3.2).
+
+    ``paired=True`` (default): seeds are treated as matched pairs — values
+    are aligned by ``seed_col`` and scipy.stats.wilcoxon (paired) is used.
+    Groups whose seed sets do not fully intersect are compared with the
+    independent-samples rank-sum test instead (never silently misaligned).
+
+    Returns a list of dicts: {A, B, p_value, Holm_adjusted_p, significant,
+    test, n}.
     """
     groups = {}
+    seeds = {}
     if not _HAVE_PANDAS:  # pragma: no cover
         return []
     for name, g in df.groupby(group_col):
-        groups[name] = g[metric_col].dropna().astype(float).values
+        sub = g[[metric_col] + ([seed_col] if seed_col in g.columns else [])]
+        sub = sub.dropna(subset=[metric_col])
+        groups[name] = sub[metric_col].astype(float).values
+        if seed_col in sub.columns:
+            seeds[name] = sub[seed_col].astype(int).values
+        else:
+            seeds[name] = np.arange(len(sub))
     names = list(groups.keys())
     if reference is not None and reference in names:
         pairs = [(reference, b) for b in names if b != reference]
@@ -58,30 +102,41 @@ def wilcoxon_holm(df, metric_col, group_col="algorithm", reference=None):
                  for j in range(i + 1, len(names))]
     raw = []
     valid_pairs = []
+    test_names = []
+    ns = []
     for a, b in pairs:
         x, y = groups[a], groups[b]
         if len(x) < 2 or len(y) < 2:
             continue
-        try:
-            _, p = stats.ranksums(x, y)
-        except Exception:
-            continue
+        # decide paired vs independent by seed alignment
+        can_pair = (paired and set(seeds[a]) == set(seeds[b])
+                    and len(seeds[a]) == len(set(seeds[a])))
+        if can_pair:
+            sa = pd.Series(groups[a], index=seeds[a]).sort_index()
+            sb = pd.Series(groups[b], index=seeds[b]).sort_index()
+            xa, xb = sa.values, sb.values
+            try:
+                _, p = stats.wilcoxon(xa, xb)
+                test_names.append("wilcoxon_paired")
+                ns.append(len(xa))
+            except Exception:
+                continue
+        else:
+            try:
+                _, p = stats.ranksums(x, y)
+                test_names.append("ranksums_independent")
+                ns.append(min(len(x), len(y)))
+            except Exception:
+                continue
         raw.append(p)
         valid_pairs.append((a, b))
-    m = len(raw)
-    # Holm correction
-    order = np.argsort(raw)
-    adj = [0.0] * m
-    running = 0.0
-    for rank, idx in enumerate(order):
-        holm_p = min(1.0, raw[idx] * (m - rank))
-        running = max(running, holm_p)
-        adj[idx] = running
+    adjusted = holm_adjust(raw)
     out = []
     for k, (a, b) in enumerate(valid_pairs):
         out.append({
             "A": a, "B": b, "p_value": float(raw[k]),
-            "Holm_adjusted_p": float(adj[k]),
-            "significant": bool(adj[k] < 0.05),
+            "Holm_adjusted_p": float(adjusted[k]),
+            "significant": bool(adjusted[k] < 0.05),
+            "test": test_names[k], "n": ns[k],
         })
     return out

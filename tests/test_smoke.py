@@ -8,7 +8,7 @@ import pytest
 
 from problems import FDA3, FDA1, FDA4
 from algorithms import (LDTNSGA2, ARNSGA2, GMMTransfer, DNSGA2Response,
-                         DynamicDriver)
+                         NSGA2Static, PPSNSGA2, DynamicDriver)
 
 pytestmark = pytest.mark.smoke
 
@@ -28,11 +28,15 @@ def _run_smoke(algo, problem_name, problem_cls, tau_t=5, n_envs=2, N=20):
 
 
 def test_smoke_nsga2_fda1():
-    _run_smoke(DNSGA2Response(), "FDA1", FDA1)
+    _run_smoke(NSGA2Static(), "FDA1", FDA1)
 
 
 def test_smoke_dnsga2_fda1():
     _run_smoke(DNSGA2Response(), "FDA1", FDA1)
+
+
+def test_smoke_pps_fda1():
+    _run_smoke(PPSNSGA2(), "FDA1", FDA1)
 
 
 def test_smoke_ar1_fda1():

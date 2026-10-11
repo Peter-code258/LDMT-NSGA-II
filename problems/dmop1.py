@@ -1,13 +1,26 @@
-"""dMOP1 supplementary dynamic multi-objective problem (Farina, Deb, Amato 2004).
+"""dMOP1 supplementary dynamic multi-objective problem (PROJECT VARIANT).
 
-M=2, D=10. Uses the convex-form power-2 front (differs from FDA1 which uses sqrt).
-Standard formulation: G(t)=sin(0.5*pi*t); f1=x0; g=1+sum((x[1:]-G)^2);
-f2 = g*(1-(f1/g)^2). Pareto front (time-invariant): {(u, 1-u^2): u in [0,1]}.
-PS: x[:,1:] = G(t).
+v2.4 (attribution fix): the dMOP benchmark suite is due to
 
-NOTE: PlatEMO master does not ship a DMOP1.m (verified via the BIMK/PlatEMO
-repo). This is the widely-published standard dMOP1; flagged as the
-authoritative Farina-Deb-Amato (2004) formulation.
+    Goh C.-K., Tan K. C. (2009). "A Competitive-Cooperative Coevolutionary
+    Paradigm for Dynamic Multiobjective Optimization." IEEE Transactions on
+    Evolutionary Computation, 13(1): 103-127.
+
+NOT Farina/Deb/Amato (2004) (the FDA suite) as an earlier version of this
+docstring wrongly claimed. The authoritative dMOP1 (Goh & Tan 2009; also
+Helbig 2012 PhD thesis, p.52-54, eq. 3.38,
+https://www.tech.dmu.ac.uk/~syang/PhDTheses/MardeHelbig-PhDThesis2012.pdf)
+uses g = 1 + 9*sum((x[1:] - G(t))^2) and a sqrt-shaped front
+f2 = g*(1 - sqrt(f1/g)).
+
+THIS implementation is a project variant and is NOT the authoritative dMOP1:
+  - g coefficient is 1 (not 9): g = 1 + sum((x[1:]-G)^2)
+  - front exponent is 2 (not sqrt): f2 = g*(1-(f1/g)^2), giving the
+    time-invariant PF {(u, 1-u^2): u in [0,1]}
+  - PS: x[:,1:] = G(t), G(t)=sin(0.5*pi*t)  (matches the original)
+PlatEMO master (commit d25e65d) ships no DMOP1.m (verified via the GitHub
+git-tree API), so results on this problem are labelled "supplementary" and
+must not be cited as the standard dMOP1.
 """
 import numpy as np
 from .base import DynamicProblem

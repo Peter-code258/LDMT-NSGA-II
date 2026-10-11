@@ -9,7 +9,16 @@ from pymoo.core.problem import Problem
 
 
 class DynamicProblem(Problem):
-    """Base class holding the FDA discrete-time parameters."""
+    """Base class holding the FDA discrete-time parameters.
+
+    v2.2 (P1-1E): each problem instance carries a FIXED probe set drawn once
+    with seed 2026 from the real decision bounds [xl, xu]. All algorithms
+    share this probe so D_k is comparable across algorithms and never
+    distorted by clipping population rows into [0,1].
+    """
+
+    PROBE_SEED = 2026
+    PROBE_SIZE = 10
 
     def __init__(self, n_var, n_obj, xl, xu, tau_t=10, n_t=10):
         self.tau_t = int(tau_t)
@@ -19,6 +28,12 @@ class DynamicProblem(Problem):
         super().__init__(n_var=n_var, n_obj=n_obj,
                          xl=np.asarray(xl, dtype=float),
                          xu=np.asarray(xu, dtype=float))
+        # shared fixed probe in REAL decision space
+        _rng = np.random.default_rng(self.PROBE_SEED)
+        self.probe = _rng.uniform(
+            np.asarray(xl, dtype=float),
+            np.asarray(xu, dtype=float),
+            size=(self.PROBE_SIZE, int(n_var)))
 
     # ---- time helpers ----
     def time_at(self, g):

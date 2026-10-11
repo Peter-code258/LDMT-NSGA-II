@@ -1,5 +1,5 @@
-"""Supplementary experiment: dMOP1/dMOP2, tau=25, n_t=20, N=100, n_gen=300,
-all 4 algorithms, 30 seeds."""
+"""Supplementary experiment: dMOP family, tau=25, n_t=20, N=100, n_gen=300,
+all 6 canonical algorithms, 30 seeds."""
 import argparse
 import os
 import sys
@@ -7,11 +7,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from experiments.common import (RunConfig, ExperimentRunner,
-                                 ALGORITHM_REGISTRY)
+                                 CANONICAL_ALGOS)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="LDMT-NSGA-II supplementary dMOP")
+    ap = argparse.ArgumentParser(description="LDT-NSGA-II supplementary dMOP")
     ap.add_argument("--problems", default="DMOP1,DMOP2")
     ap.add_argument("--tau", type=int, default=25)
     ap.add_argument("--n-gen", type=int, default=300)
@@ -19,7 +19,9 @@ def main():
     ap.add_argument("--out", default="results/raw")
     ap.add_argument("--n", type=int, default=100)
     ap.add_argument("--n-t", type=int, default=20)
-    ap.add_argument("--algos", default=",".join(ALGORITHM_REGISTRY.keys()))
+    # v2.2: default to the canonical list ONLY (registry keys include
+    # aliases that would otherwise run the same algorithm repeatedly)
+    ap.add_argument("--algos", default=",".join(CANONICAL_ALGOS))
     ap.add_argument("--limit-seeds", type=int, default=None)
     args = ap.parse_args()
 

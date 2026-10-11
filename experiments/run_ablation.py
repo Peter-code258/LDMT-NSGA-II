@@ -43,7 +43,7 @@ class LDTAblationB(LDTNSGA2):
         nd_X = prev_X[nd_mask] if nd_mask.sum() >= max(10, N // 4) else prev_X
         n_nd = int(nd_X.shape[0])
         mu_e, sigma_e = extract_features(nd_X, xl, xu)
-        self._ensure_probe(prev_X, D)
+        self._ensure_probe(prev_X, problem)
         Dk = self._detect_change(problem)
         # no distribution transfer: reuse old population directly
         n_transfer = int(round(self.transfer_ratio * N))

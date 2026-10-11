@@ -1,14 +1,48 @@
-"""DNSGA-II-A (response-based) baseline.
+"""Static NSGA-II and DNSGA-II-inspired (response-based) baselines.
 
-On environment change, re-evaluate the previous population (pymoo handles
-re-evaluation under the new env) and inject ``immigrant_ratio`` of random
-(resp. heavily-mutated) immigrants.
+v2.2 (P0-2.4): the two baselines are now SEPARATE classes with distinct,
+tested behaviour:
+
+- :class:`NSGA2Static`  — static-response benchmark: on environment change
+  the previous decision variables are carried over unchanged (pymoo
+  re-evaluates them under the new environment); NO immigrants, NO
+  prediction, NO migration. Canonical id ``nsga2_static``.
+
+- :class:`DNSGA2Response` — DNSGA-II-*inspired* project implementation:
+  keeps a fixed share of the previous population and injects
+  ``immigrant_ratio`` random (or heavily-mutated) immigrants. This is NOT a
+  reproduction of the original DNSGA-II paper. Canonical id
+  ``dnsga2_inspired``.
 """
 import numpy as np
 
 
+class NSGA2Static:
+    """Static-response baseline: carry over the population, no immigrants."""
+    name = "nsga2_static"
+
+    def __init__(self, pop_size=None):
+        self.pop_size = pop_size
+
+    def respond(self, prev_X, prev_F, problem, env_index, rng):
+        # Keep the previous decision variables EXACTLY as they were; pymoo
+        # re-evaluates them under the new environment. No new individuals.
+        new_X = np.asarray(prev_X, dtype=float).copy()
+        n_nd = int(np.sum(np.isfinite(prev_F).all(axis=1))) \
+            if prev_F is not None else 0
+        # v2.4 (K9 fix): real diagnostic instead of hard-coded 0.0 — fraction
+        # of individuals sitting ON the variable bounds after the response.
+        xl = np.asarray(problem.xl, dtype=float)
+        xu = np.asarray(problem.xu, dtype=float)
+        bclip = float(np.mean(np.any(
+            (new_X <= xl + 1e-9) | (new_X >= xu - 1e-9), axis=1)))
+        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": bclip,
+                       "n_nd": n_nd}
+
+
 class DNSGA2Response:
-    name = "DNSGA2"
+    """DNSGA-II-inspired response baseline with random/mutant immigrants."""
+    name = "dnsga2_inspired"
 
     def __init__(self, strategy="random", immigrant_ratio=0.2, pop_size=None):
         self.strategy = strategy
@@ -37,7 +71,10 @@ class DNSGA2Response:
             immigrants = rng.uniform(xl, xu, size=(n_imm, D))
         new_X = np.concatenate([kept, immigrants], axis=0)
         new_X = self._resize(new_X, N, xl, xu, rng)
-        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": 0.0,
+        # v2.4 (K9 fix): real diagnostic instead of hard-coded 0.0.
+        bclip = float(np.mean(np.any(
+            (new_X <= xl + 1e-9) | (new_X >= xu - 1e-9), axis=1)))
+        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": bclip,
                         "n_nd": int(np.sum(np.isfinite(prev_F).all(axis=1)))}
 
     def _resize(self, X, N, xl, xu, rng):

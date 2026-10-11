@@ -4,6 +4,7 @@ and a narrative markdown report. Run after experiments complete.
     python analyze.py
 """
 import os
+import sys
 import glob
 import warnings
 import numpy as np
@@ -12,26 +13,34 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from evaluation.friedman_test import friedman_nemenyi
+from evaluation.statistics import holm_adjust
+from experiments.common import (CANONICAL_ALGOS, ALGO_DISPLAY,
+                                 LEGACY_ALGO_MAP)
 
 warnings.filterwarnings("ignore")
-RAW = "results/raw"
-SUMM = "results/summary"
-FIG = "results/figures"
+# v2.2: paths overridable via environment variables (defaults unchanged)
+RAW = os.environ.get("LDT_RAW", "results/raw")
+SUMM = os.environ.get("LDT_SUMM", "results/summary")
+FIG = os.environ.get("LDT_FIG", "results/figures")
 for d in (SUMM, FIG):
     os.makedirs(d, exist_ok=True)
 
-ALGO_ORDER = ["DNSGA2", "AR_NSGA2", "GMM_Transfer", "LDMT_NSGA2", "PPS"]
-ALGO_LABEL = {
-    "DNSGA2": "DNSGA-II",
-    "AR_NSGA2": "AR-NSGA-II",
-    "GMM_Transfer": "GMM-Transfer",
-    "LDMT_NSGA2": "LDMT-NSGA-II",
-    "PPS": "PPS",
+# v2.2 (P1-3.1): canonical algorithm ids only; legacy CSV labels found in
+# old result files are normalized via LEGACY_ALGO_MAP after loading.
+ALGO_ORDER = list(CANONICAL_ALGOS)
+ALGO_LABEL = dict(ALGO_DISPLAY)
+COLORS = {
+    "nsga2_static": "#7f7f7f",
+    "dnsga2_inspired": "#9467bd",
+    "ar1_predictive": "#1f77b4",
+    "gmm_inspired": "#ff7f0e",
+    "pps": "#2ca02c",
+    "ldt_nsga2": "#d62728",
 }
-COLORS = {"DNSGA2": "#7f7f7f", "AR_NSGA2": "#1f77b4",
-          "GMM_Transfer": "#ff7f0e", "LDMT_NSGA2": "#d62728",
-          "PPS": "#2ca02c"}
 
 
 def load(pattern):
@@ -99,8 +108,13 @@ def summarize(runs):
     return out
 
 
-def wilcoxon_holm(runs, ref="LDMT_NSGA2"):
-    """Pairwise Wilcoxon (LDMT vs each other) on MIGD per (problem,tau)."""
+def wilcoxon_holm(runs, ref="ldt_nsga2"):
+    """Pairwise Wilcoxon (LDT vs each other) on MIGD per (problem,tau).
+
+    v2.2 (P1-3.2): paired test on seed-aligned values when both seed sets
+    match exactly, rank-sum otherwise; Holm step-down with running maximum
+    via ``evaluation.statistics.holm_adjust``.
+    """
     rows = []
     for (prob, tau), grp in runs.groupby(["problem", "tau_t"]):
         ref_vals = grp[grp["algorithm"] == ref].set_index("seed")["MIGD"]
@@ -113,18 +127,21 @@ def wilcoxon_holm(runs, ref="LDMT_NSGA2"):
                 pvals.append((a, np.nan))
                 continue
             try:
-                p = stats.wilcoxon(ref_vals.loc[common], o.loc[common]).pvalue
+                if set(ref_vals.index) == set(o.index):
+                    p = stats.wilcoxon(ref_vals.loc[common],
+                                       o.loc[common]).pvalue
+                else:
+                    p = stats.ranksums(ref_vals.loc[common],
+                                       o.loc[common]).pvalue
             except Exception:
                 p = np.nan
             pvals.append((a, p))
-        # Holm correction
+        # Holm step-down correction with running maximum (P1-3.2)
         valid = [(a, p) for a, p in pvals if not np.isnan(p)]
-        ps = sorted(range(len(valid)), key=lambda i: valid[i][1])
-        m = len(valid)
-        for rank, i in enumerate(ps):
-            a, p = valid[i]
-            adj = min(1.0, p * (m - rank))
-            rows.append({"problem": prob, "tau_t": tau, "comparison": f"{ref} vs {a}",
+        adjusted = holm_adjust([p for _, p in valid])
+        for (a, p), adj in zip(valid, adjusted):
+            rows.append({"problem": prob, "tau_t": tau,
+                         "comparison": f"{ref} vs {a}",
                          "p_value": p, "p_holm": adj,
                          "sig": "***" if adj < 0.001 else ("**" if adj < 0.01 else ("*" if adj < 0.05 else "ns"))})
     return pd.DataFrame(rows)
@@ -137,10 +154,17 @@ def fmt(x, dec=4):
 
 
 # ---------- load ----------
-comp = load("comparison_*.csv")
-abl = load("ablation_*.csv")
-sens = load("sensitivity_*.csv")
-supp = load("supplementary_*.csv")
+def _normalize_algo(df):
+    """Map legacy CSV algorithm labels to canonical ids (v2.2, P1-3.1)."""
+    if df is not None and "algorithm" in df.columns:
+        df["algorithm"] = df["algorithm"].map(
+            lambda a: LEGACY_ALGO_MAP.get(a, a))
+    return df
+
+comp = _normalize_algo(load("comparison_*.csv"))
+abl = _normalize_algo(load("ablation_*.csv"))
+sens = _normalize_algo(load("sensitivity_*.csv"))
+supp = _normalize_algo(load("supplementary_*.csv"))
 
 report_lines = ["# LDT-NSGA-II 实验分析报告\n",
                 f"生成于实验完成后。原始数据见 results/raw，汇总见 results/summary，图见 results/figures。\n"]
@@ -154,7 +178,9 @@ if comp is not None:
     tests = wilcoxon_holm(runs)
     tests.to_csv(os.path.join(SUMM, "statistical_tests.csv"), index=False)
 
-    report_lines.append("## 1. 主对比实验 (FDA1/3/4 × τ_t∈{10,25,50} × 5算法 × 30次)\n")
+    report_lines.append(
+        f"## 1. 主对比实验 (FDA1/3/4 × τ_t∈{{10,25,50}} × "
+        f"{runs['algorithm'].nunique()}算法 × 30次)\n")
     report_lines.append("MIGD(越小越好)、MHV(越大越好)、变化后MIGD(响应速度)、单代时间、迁移耗时。\n\n")
     report_lines.append("| problem | τ_t | algorithm | MIGD | MHV | postΔMIGD | gen_t(s) | mig_t(s) |")
     report_lines.append("\n|---|---|---|---|---|---|---|---|")
@@ -239,15 +265,15 @@ if comp is not None:
                       index=False)
 
     # best baseline gap (relative MIGD vs best non-LDMT)
-    report_lines.append("\n\n### 1.1 LDMT 相对最佳基线的 MIGD 差距\n")
-    report_lines.append("| problem | τ_t | best_baseline | LDMT | rel_gap% |")
+    report_lines.append("\n\n### 1.1 LDT 相对最佳基线的 MIGD 差距\n")
+    report_lines.append("| problem | τ_t | best_baseline | LDT | rel_gap% |")
     report_lines.append("\n|---|---|---|---|---|")
     for (prob, tau), grp in summ.groupby(["problem", "tau_t"]):
-        nonl = grp[grp["algorithm"] != "LDMT_NSGA2"]
+        nonl = grp[grp["algorithm"] != "ldt_nsga2"]
         if nonl.empty:
             continue
         bb = nonl.loc[nonl["MIGD_mean"].idxmin()]
-        ld = grp[grp["algorithm"] == "LDMT_NSGA2"]
+        ld = grp[grp["algorithm"] == "ldt_nsga2"]
         if ld.empty:
             continue
         ld = ld.iloc[0]
@@ -256,7 +282,7 @@ if comp is not None:
             f"\n| {prob} | {int(tau)} | {ALGO_LABEL.get(bb['algorithm'], bb['algorithm'])} ({bb['MIGD_mean']:.4f}) | "
             f"{ld['MIGD_mean']:.4f} | {gap:+.2f}% |")
 
-    report_lines.append("\n\n### 1.2 统计检验 (Wilcoxon 秩和 + Holm 校正, LDMT vs 基线, MIGD)\n")
+    report_lines.append("\n\n### 1.2 统计检验 (Wilcoxon 配对/秩和 + Holm 校正, LDT vs 基线, MIGD)\n")
     report_lines.append("| problem | τ_t | comparison | p | p_holm | sig |")
     report_lines.append("\n|---|---|---|---|---|---|")
     for _, t in tests.iterrows():
@@ -364,13 +390,20 @@ if abl is not None:
         report_lines.append(
             f"\n| {r['problem']} | {r['algorithm']} | {r['MIGD_mean']:.4f}±{r['MIGD_std']:.4f} | "
             f"{r['MHV_mean']:.4f} | {fmt(r['mig_time_mean'],5)} |")
-    # ablation bar chart
+    # ablation bar chart (CSV algorithm labels come from the variant
+    # classes' .name attributes written by run_ablation.py)
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    ablation_order = ["ldt_nsga2", "LDT_AblationA", "LDT_AblationB",
+                      "LDT_AblationC"]
+    ablation_labels = {"ldt_nsga2": "full", "LDT_AblationA": "no_trend",
+                       "LDT_AblationB": "no_transfer",
+                       "LDT_AblationC": "kappa0"}
     for j, prob in enumerate(sorted(runs_a["problem"].unique())):
         ax = axes[j]; sub = runs_a[runs_a["problem"] == prob]
-        order = ["full", "ablation_a", "ablation_b", "ablation_c"]
+        order = [v for v in ablation_order
+                 if v in set(sub["algorithm"].unique())]
         data = [sub[sub["algorithm"] == v]["MIGD"].values for v in order]
-        bp = ax.boxplot(data, labels=["full", "no_trend", "no_transfer", "kappa0"],
+        bp = ax.boxplot(data, labels=[ablation_labels[v] for v in order],
                         patch_artist=True, showfliers=False)
         for patch, c in zip(bp["boxes"], ["#d62728", "#ff7f0e", "#1f77b4", "#7f7f7f"]):
             patch.set_facecolor(c); patch.set_alpha(0.7)
@@ -429,9 +462,101 @@ report_lines.append("- 见上述各表与 figures/ 下箱线图、恢复曲线�
 report_lines.append("- 假设H1(分布迁移改善变化后跟踪): 由 post_change_MIGD 与恢复曲线判断。\n")
 report_lines.append("- 假设H2(低维特征迁移相对GMM更省时): 由 mig_time 对比判断。\n")
 report_lines.append("- 假设H3(迁移比例/变化幅度影响稳定性): 由敏感性图判断。\n")
-report_lines.append("- 若某指标 LDMT 未达优势, 已如实列出负面结果, 不删除不利测试实例。\n")
+report_lines.append("- 若某指标 LDT 未达优势, 已如实列出负面结果, 不删除不利测试实例。\n")
 
 with open(os.path.join(SUMM, "analysis_report.md"), "w", encoding="utf-8") as f:
     f.write("".join(report_lines))
+
+# ---------- JSON exporters for build_report.py (v2.2) ----------
+# build_report.py consumes three files under SUMM:
+#   _chart_data.json  -> {"comparison": [...], "ablation": [...], "sensitivity": [...]}
+#   _boxplot.json     -> {problem: {str(tau): {algo: [MIGD per run]}}}
+#   _recovery.json    -> {problem: {algo: {str(gen_in_env): mean IGD}}}  (tau=25)
+import json
+
+
+def _json_default(o):
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
+
+def _round(v, nd=5):
+    try:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return None
+        return round(float(v), nd)
+    except (TypeError, ValueError):
+        return None
+
+
+comparison_rows, boxplot_data, recovery_data = [], {}, {}
+if comp is not None:
+    for _, r in summ.iterrows():
+        comparison_rows.append({
+            "problem": r["problem"], "tau": int(r["tau_t"]),
+            "algo": r["algorithm"],
+            "MIGD": _round(r["MIGD_mean"]), "MIGD_std": _round(r["MIGD_std"]),
+            "MHV": _round(r["MHV_mean"]), "MHV_std": _round(r["MHV_std"]),
+            "postMIGD": _round(r["post_MIGD_mean"]),
+            "gen_t": _round(r["gen_time_mean"]),
+            "mig_t": _round(r["mig_time_mean"]),
+        })
+    # per-run MIGD distributions grouped by problem -> tau -> algo
+    for prob, sub_p in runs.groupby("problem"):
+        tau_map = {}
+        for tau, sub_t in sub_p.groupby("tau_t"):
+            algo_map = {}
+            for a in ALGO_ORDER:
+                d = sub_t[sub_t["algorithm"] == a]["MIGD"].values
+                if len(d):
+                    algo_map[a] = [_round(v) for v in d]
+            if algo_map:
+                tau_map[str(int(tau))] = algo_map
+        if tau_map:
+            boxplot_data[prob] = tau_map
+    # recovery curves: mean IGD per generation-since-change (tau=25, env>0)
+    sub = comp[(comp["tau_t"] == 25) & (comp["environment_index"] > 0)].copy()
+    if not sub.empty:
+        sub["gen_in_env"] = sub["generation"] % sub["tau_t"]
+        for prob, sp in sub.groupby("problem"):
+            algo_map = {}
+            for a, sa_r in sp.groupby("algorithm"):
+                m = sa_r.groupby("gen_in_env")["IGD"].mean()
+                algo_map[a] = {str(int(g)): _round(v) for g, v in m.items()}
+            if algo_map:
+                recovery_data[prob] = algo_map
+
+ablation_rows = []
+if abl is not None:
+    for _, r in sa.iterrows():
+        ablation_rows.append({
+            "problem": r["problem"], "variant": r["algorithm"],
+            "MIGD": _round(r["MIGD_mean"]), "MHV": _round(r["MHV_mean"]),
+        })
+
+sensitivity_rows = []
+if sens is not None:
+    g_s = runs_s.groupby(["N", "n_t"]).agg(
+        MIGD=("MIGD", "mean"), MHV=("MHV", "mean")).reset_index()
+    for _, r in g_s.iterrows():
+        sensitivity_rows.append({
+            "N": int(r["N"]), "n_t": int(r["n_t"]),
+            "MIGD": _round(r["MIGD"]), "MHV": _round(r["MHV"]),
+        })
+
+chart_data = {"comparison": comparison_rows, "ablation": ablation_rows,
+              "sensitivity": sensitivity_rows}
+with open(os.path.join(SUMM, "_chart_data.json"), "w", encoding="utf-8") as f:
+    json.dump(chart_data, f, ensure_ascii=False, default=_json_default)
+with open(os.path.join(SUMM, "_boxplot.json"), "w", encoding="utf-8") as f:
+    json.dump(boxplot_data, f, ensure_ascii=False, default=_json_default)
+with open(os.path.join(SUMM, "_recovery.json"), "w", encoding="utf-8") as f:
+    json.dump(recovery_data, f, ensure_ascii=False, default=_json_default)
+
 print("Analysis complete. See results/summary/ and results/figures/")
 print("Files:", os.listdir(SUMM), "figures:", os.listdir(FIG))

@@ -9,11 +9,32 @@ _CACHE = {}
 
 
 def _grid_unit_simplex(M, P):
-    """Deterministic unit-simplex grid of P points (0-based inclusive)."""
+    """Deterministic coverage of the first-octant unit sphere (v2.2, P1-1C).
+
+    Replaces the previous Dirichlet random sampling: points are now generated
+    by a fixed angular grid (theta, phi over [0, pi/2]) mapped to the sphere,
+    deduplicated and sorted. Deterministic across calls and machines; the
+    method and point count are recorded in the front metadata. Note this is a
+    project-defined deterministic sampling (equal spacing in angle, not
+    equal-area); PlatEMO's GetOptimum uses its own UniformPoint rules.
+    """
     if M == 2:
         u = np.linspace(0.0, 1.0, P)
         return np.column_stack([u, 1.0 - u])
-    # M >= 3: sample on the simplex then normalize to the first-octant sphere
+    if M == 3:
+        n_side = max(2, int(np.ceil(np.sqrt(P))))
+        a = np.linspace(0.0, np.pi / 2.0, n_side)
+        b = np.linspace(0.0, np.pi / 2.0, n_side)
+        A, B = np.meshgrid(a, b)
+        f1 = (np.cos(A) * np.cos(B)).ravel()
+        f2 = (np.cos(A) * np.sin(B)).ravel()
+        f3 = np.sin(A).ravel()
+        pts = np.column_stack([f1, f2, f3])
+        pts = np.unique(np.round(pts, 12), axis=0)
+        order = np.lexsort((pts[:, 2], pts[:, 1], pts[:, 0]))
+        return pts[order]
+    # M >= 4: deterministic scalar grid is impractical; fall back to a FIXED
+    # seeded Dirichlet draw (documented as project-defined, not PlatEMO).
     rng = np.random.default_rng(20240520)
     X = rng.dirichlet(np.ones(M), size=P)
     return X / np.sqrt(np.sum(X ** 2, axis=1, keepdims=True))

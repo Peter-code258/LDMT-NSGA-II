@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from experiments.common import (RunConfig, ExperimentRunner,
-                                 ALGORITHM_REGISTRY)
+                                 ALGORITHM_REGISTRY, CANONICAL_ALGOS)
 
 
 def _parse_seeds(s):
@@ -41,7 +41,9 @@ def main():
     ap.add_argument("--n-gen", type=int, default=300)
     ap.add_argument("--n", type=int, default=100, help="population size")
     ap.add_argument("--n-t", type=int, default=20)
-    ap.add_argument("--algos", default=",".join(ALGORITHM_REGISTRY.keys()))
+    ap.add_argument("--algos", default=",".join(CANONICAL_ALGOS),
+                    help="comma-separated algorithm ids/aliases "
+                         "(default: canonical list, no duplicates)")
     ap.add_argument("--limit-seeds", type=int, default=None,
                     help="take only first N seeds (quick tests)")
     args = ap.parse_args()
@@ -54,7 +56,7 @@ def main():
     cfg = RunConfig(problem=problems[0] if problems else "FDA1",
                     tau_t=taus[0] if taus else 25, n_t=args.n_t, N=args.n,
                     n_gen=args.n_gen, algorithms=algos, seeds=range(30),
-                    code_version="v1.0")
+                    code_version="v2.2")
 
     runner = ExperimentRunner(out_dir=args.out)
     try:
@@ -67,10 +69,13 @@ def main():
                    else seeds)
     print(f"Comparison: problems={problems} taus={taus} "
           f"algos={algos} seeds={shown_seeds}")
-    runner.run("comparison", cfg, algorithms=algos, problems=problems,
-               taus=taus, seeds=seeds, limit_seeds=args.limit_seeds,
-               progress_label="[comparison]")
+    summary = runner.run("comparison", cfg, algorithms=algos, problems=problems,
+                         taus=taus, seeds=seeds, limit_seeds=args.limit_seeds,
+                         progress_label="[comparison]")
     print("Done. CSVs in", args.out)
+    # v2.2 (P1-3.6): non-zero exit when any combo failed
+    if summary.get("failed", 0) > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

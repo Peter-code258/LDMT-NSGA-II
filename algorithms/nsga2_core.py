@@ -36,6 +36,20 @@ def make_nsga2(pop_size, sampling=None):
     )
 
 
+def _algo_n_eval(algo):
+    """Objective-evaluation count of a pymoo Algorithm instance.
+
+    pymoo 0.6.x has NO ``algo.n_eval`` attribute; the counter lives on the
+    evaluator (``algo.evaluator.n_eval``). Older versions exposed it
+    directly on the algorithm. Returns 0 when neither exists.
+    """
+    ev = getattr(algo, "evaluator", None)
+    n = getattr(ev, "n_eval", None)
+    if n is None:
+        n = getattr(algo, "n_eval", 0)
+    return int(n)
+
+
 def _row_metrics(F, problem_name, problem, n_points):
     """Compute IGD/HV for the current population objectives."""
     M = F.shape[1]
@@ -76,6 +90,14 @@ class DynamicDriver:
         self.xl = np.asarray(problem.xl, dtype=float)
         self.xu = np.asarray(problem.xu, dtype=float)
         self.rows = []
+        # v2.2 (P1-3.5): whole-run cumulative objective-evaluation counter.
+        # pymoo's algo.n_eval is ENVIRONMENT-LOCAL (a fresh NSGA2 is created
+        # per environment); we sum the per-env totals here for budget audit.
+        self.n_eval_total = 0
+        self.n_eval_per_env = []
+        # v2.4: diagnostic stamp written into each per-generation CSV row.
+        # Existing v2.2/v2.3 CSVs keep their original stamps (no re-run).
+        self.code_version = "v2.4"
 
     def run(self, n_points=500):
         rng = np.random.default_rng(self.run_seed)
@@ -129,8 +151,7 @@ class DynamicDriver:
                 mig_recorded = migration_runtime if (
                     gen_in_env == 0 and k > 0) else 0.0
                 # cumulative function evaluations reported by pymoo
-                n_eval = int(getattr(algo, "n_eval", (g_global + 1)
-                                    * self.pop_size))
+                n_eval = _algo_n_eval(algo)
                 self.rows.append({
                     "algorithm": getattr(self.algorithm, "name",
                                          self.algorithm.__class__.__name__),
@@ -147,7 +168,7 @@ class DynamicDriver:
                     "generation_runtime_s": gen_runtime,
                     "migration_runtime_s": mig_recorded,
                     "n_evaluations": n_eval,
-                    "code_version": "v1.0",
+                    "code_version": self.code_version,
                     "lambda_k": lam_k,
                     "boundary_clip_ratio": bclip,
                     "n_nd": n_nd,
@@ -155,4 +176,8 @@ class DynamicDriver:
             pop = algo.pop
             prev_X = pop.get("X")
             prev_F = pop.get("F")
+            # v2.2: accumulate the env-local evaluation count
+            env_evals = _algo_n_eval(algo)
+            self.n_eval_per_env.append(env_evals)
+            self.n_eval_total += env_evals
         return self.rows

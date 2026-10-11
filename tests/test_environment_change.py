@@ -46,7 +46,8 @@ def test_fda4_objectives_differ_across_envs():
 
 
 def test_fda4_unit_sphere_at_optimum():
-    """When x[:,M:]=G (g=0) the objectives lie on the unit hypersphere."""
+    """When the distance vars x[:,M-1:]=G (MATLAB PopDec(:,M:end)) g=0 holds
+    and the objectives lie on the unit hypersphere."""
     rng = np.random.default_rng(42)
     M = 3
     p = FDA4(tau_t=10, n_t=20)
@@ -54,7 +55,7 @@ def test_fda4_unit_sphere_at_optimum():
     G = abs(np.sin(0.5 * np.pi * p.t))
     N = 300
     X = rng.uniform(0, 1, size=(N, 12))
-    X[:, M:] = G  # force g = 0
+    X[:, M - 1:] = G  # force g = 0 (distance variables start at index M-1)
     F = p._calc_objectives(X)
     norms = np.linalg.norm(F, axis=1)
     assert np.allclose(norms, 1.0, atol=1e-6), \

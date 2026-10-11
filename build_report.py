@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
-"""Assemble the LDT experiment report HTML with all data embedded (v2.1)."""
+"""Assemble the LDT experiment report HTML with all data embedded (v2.4).
+
+v2.4 (K12 fix): doc.css and echarts.min.js are now INLINED at build time so
+the generated index.html is a single self-contained file (previously the
+report linked to assets/ relatively and broke when moved).
+"""
 import json
+import os
 import csv
 from pathlib import Path
 from collections import defaultdict
 
 ROOT = Path(r"D:\23-兴湘计科\LDT-NSGA-II")
-CD = json.loads((ROOT / "results/summary/_chart_data.json").read_text(encoding="utf-8-sig"))
-REC = json.loads((ROOT / "results/summary/_recovery.json").read_text(encoding="utf-8-sig"))
-BOX = json.loads((ROOT / "results/summary/_boxplot.json").read_text(encoding="utf-8-sig"))
+# v2.2: results tree + output path overridable via environment variables
+RESULTS_ROOT = Path(os.environ.get("LDT_ROOT", str(ROOT)))
+OUT_PATH = Path(os.environ.get(
+    "LDT_OUT", str(ROOT / "ldmt-experiment-report" / "index.html")))
+# v2.4 (K12): read assets for inlining (kept on disk as the source of truth)
+_ASSETS = ROOT / "ldmt-experiment-report" / "assets"
+DOC_CSS = (_ASSETS / "doc.css").read_text(encoding="utf-8")
+ECHARTS_JS = (_ASSETS / "echarts.min.js").read_text(encoding="utf-8")
+CD = json.loads((RESULTS_ROOT / "results/summary/_chart_data.json").read_text(encoding="utf-8-sig"))
+REC = json.loads((RESULTS_ROOT / "results/summary/_recovery.json").read_text(encoding="utf-8-sig"))
+BOX = json.loads((RESULTS_ROOT / "results/summary/_boxplot.json").read_text(encoding="utf-8-sig"))
 
 # v2.1: Friedman + Nemenyi statistical test results
-FRIED_PATH = ROOT / "results/summary/friedman_results.json"
+FRIED_PATH = RESULTS_ROOT / "results/summary/friedman_results.json"
 FRIED = json.loads(FRIED_PATH.read_text(encoding="utf-8-sig")) if FRIED_PATH.exists() else []
 
 # v2.1: recovery generations (per env recovery speed)
@@ -19,7 +33,7 @@ def _std(v):
     m = sum(v) / len(v)
     return (sum((x - m) ** 2 for x in v) / (len(v) - 1)) ** 0.5
 
-RECG_PATH = ROOT / "results/summary/recovery_generations.csv"
+RECG_PATH = RESULTS_ROOT / "results/summary/recovery_generations.csv"
 recg_agg = defaultdict(list)
 if RECG_PATH.exists():
     with open(RECG_PATH, newline="", encoding="utf-8") as f:
@@ -61,11 +75,16 @@ REC4_JS = js(REC.get("FDA4", {}))
 
 # Build comparison table rows (HTML) for main results
 problems_order = ["FDA1", "FDA3", "FDA4", "dMOP1", "dMOP2", "DMOP3"]
-algo_order = ["DNSGA2", "AR_NSGA2", "GMM_Transfer", "PPS", "LDMT_NSGA2"]
-algo_label = {"DNSGA2": "DNSGA-II", "AR_NSGA2": "AR-NSGA-II",
-              "GMM_Transfer": "GMM-Transfer", "PPS": "PPS",
-              "LDMT_NSGA2": "LDT-NSGA-II", "LDT_NSGA2": "LDT-NSGA-II(v2.1)",
-              "PPS_NSGA2": "PPS"}
+# v2.2: canonical algorithm ids (experiments/common.py CANONICAL_ALGOS)
+algo_order = ["nsga2_static", "dnsga2_inspired", "ar1_predictive",
+              "gmm_inspired", "pps", "ldt_nsga2"]
+# v2.2: display names mirror experiments/common.py ALGO_DISPLAY (hardcoded)
+algo_label = {"nsga2_static": "NSGA-II (static)",
+              "dnsga2_inspired": "DNSGA-II-inspired",
+              "ar1_predictive": "AR1-Predictive",
+              "gmm_inspired": "GMM-inspired",
+              "pps": "PPS",
+              "ldt_nsga2": "LDT-NSGA-II"}
 
 # v2.1: build Friedman test table rows
 fried_rows_html = []
@@ -140,22 +159,251 @@ for prob in problems_order:
             if abs(r["MHV"] - hv_best) < 1e-9:
                 mhv_wins[r["algo"]] += 1
 
-# v2.1: LDT algorithm keys present in data (old LDMT_NSGA2 or new LDT_NSGA2)
-ldt_key = "LDMT_NSGA2" if migd_wins.get("LDMT_NSGA2") else "LDT_NSGA2"
-if "LDMT_NSGA2" not in migd_wins and "LDT_NSGA2" in migd_wins:
-    ldt_key = "LDT_NSGA2"
-ldt_migd_wins = migd_wins.get(ldt_key, migd_wins.get("LDMT_NSGA2", 0))
-ldt_mhv_wins = mhv_wins.get(ldt_key, mhv_wins.get("LDMT_NSGA2", 0))
+# v2.2: LDT canonical id (legacy LDMT_NSGA2/LDT_NSGA2 aliases were dropped)
+ldt_migd_wins = migd_wins.get("ldt_nsga2", 0)
+ldt_mhv_wins = mhv_wins.get("ldt_nsga2", 0)
 
-# GMM vs LDMT speedup
+# GMM vs LDT speedup
 speedups = []
 for (p, a), v in mt.items():
-    if a == "GMM_Transfer":
+    if a == "gmm_inspired":
         gmm = sum(v) / len(v)
-        ldmt = sum(mt[(p, "LDMT_NSGA2")]) / len(mt[(p, "LDMT_NSGA2")])
+        ldmt = sum(mt[(p, "ldt_nsga2")]) / len(mt[(p, "ldt_nsga2")])
         speedups.append((p, gmm / ldmt))
 speedup_str = ", ".join(f"{p} {r:.1f}×" for p, r in speedups)
-avg_speedup = sum(r for _, r in speedups) / len(speedups)
+avg_speedup = (sum(r for _, r in speedups) / len(speedups)) if speedups else 0.0
+
+# v2.2: inline chart-rendering JS ported from ldmt-experiment-report/assets/doc.js,
+# updated to the canonical algorithm ids (the template no longer loads doc.js,
+# whose legacy algoOrder/labels cannot render canonical-id data).
+_CHART_JS = r"""<script>
+(function () {
+  "use strict";
+  var palette = { blue: "#2563eb", teal: "#0f766e", rose: "#b83f58",
+                  gold: "#b7791f", line: "#e6ebf0", axis: "#475569" };
+  var algoLabel = {
+    "nsga2_static": "NSGA-II (static)",
+    "dnsga2_inspired": "DNSGA-II-inspired",
+    "ar1_predictive": "AR1-Predictive",
+    "gmm_inspired": "GMM-inspired",
+    "pps": "PPS",
+    "ldt_nsga2": "LDT-NSGA-II"
+  };
+  var algoColor = {
+    "nsga2_static": "#7f7f7f",
+    "dnsga2_inspired": "#9467bd",
+    "ar1_predictive": "#1f77b4",
+    "gmm_inspired": "#ff7f0e",
+    "pps": "#2ca02c",
+    "ldt_nsga2": "#d62728"
+  };
+  var algoOrder = ["nsga2_static", "dnsga2_inspired", "ar1_predictive",
+                   "gmm_inspired", "pps", "ldt_nsga2"];
+
+  function readJson(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    try { return JSON.parse(el.textContent || "null"); }
+    catch (error) { console.warn("Invalid JSON block", id, error); return null; }
+  }
+  function grid() {
+    return { left: "8%", right: "6%", top: 56, bottom: 64, containLabel: true };
+  }
+  function groupedBar(rows, opts) {
+    var xVals = [], seen = new Set();
+    rows.forEach(function (r) {
+      var k = r[opts.xKey];
+      if (!seen.has(k)) { seen.add(k); xVals.push(k); }
+    });
+    var seriesKeys = opts.seriesValues ||
+      Array.from(new Set(rows.map(function (r) { return r[opts.seriesKey]; })));
+    var series = seriesKeys.map(function (sk) {
+      return {
+        name: algoLabel[sk] || sk, type: "bar",
+        itemStyle: { color: algoColor[sk] || undefined },
+        data: xVals.map(function (xv) {
+          var hit = null;
+          rows.forEach(function (x) {
+            if (x[opts.xKey] === xv && x[opts.seriesKey] === sk) hit = x;
+          });
+          return hit ? hit[opts.valueKey] : null;
+        })
+      };
+    });
+    return {
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      legend: { top: 6, textStyle: { fontSize: 11 } },
+      grid: grid(),
+      xAxis: { type: "category", data: xVals, axisLabel: { fontSize: 11 } },
+      yAxis: { type: "value", name: opts.yLabel || "",
+        nameTextStyle: { fontSize: 11 },
+        splitLine: { lineStyle: { color: palette.line } } },
+      series: series
+    };
+  }
+  function migdBarOption(rows) {
+    rows.forEach(function (r) { r.xt = r.problem + "/τ" + r.tau; });
+    return groupedBar(rows, {
+      xKey: "xt", seriesKey: "algo", valueKey: "MIGD",
+      seriesValues: algoOrder, yLabel: "MIGD (↓)"
+    });
+  }
+  function migTimeOption(rows) {
+    return groupedBar(rows, {
+      xKey: "problem", seriesKey: "algo", valueKey: "mig_t",
+      seriesValues: algoOrder, yLabel: "迁移耗时 (秒, ↓)"
+    });
+  }
+  function ablationOption(rows) {
+    var variants = ["ldt_nsga2", "LDT_AblationA", "LDT_AblationB", "LDT_AblationC"];
+    var variantLabel = {
+      "ldt_nsga2": "完整 LDT", "LDT_AblationA": "无趋势模块 (A)",
+      "LDT_AblationB": "无分布迁移 (B)", "LDT_AblationC": "κ=0 (C)"
+    };
+    var variantColor = {
+      "ldt_nsga2": "#d62728", "LDT_AblationA": "#ff7f0e",
+      "LDT_AblationB": "#1f77b4", "LDT_AblationC": "#7f7f7f"
+    };
+    var probs = [], seen = new Set();
+    rows.forEach(function (r) {
+      if (!seen.has(r.problem)) { seen.add(r.problem); probs.push(r.problem); }
+    });
+    var series = variants.map(function (v) {
+      return {
+        name: variantLabel[v], type: "bar",
+        itemStyle: { color: variantColor[v] },
+        data: probs.map(function (p) {
+          var hit = null;
+          rows.forEach(function (x) {
+            if (x.problem === p && x.variant === v) hit = x;
+          });
+          return hit ? hit.MIGD : null;
+        })
+      };
+    });
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { top: 6, textStyle: { fontSize: 11 } },
+      grid: grid(),
+      xAxis: { type: "category", data: probs },
+      yAxis: { type: "value", name: "MIGD (↓)",
+        splitLine: { lineStyle: { color: palette.line } } },
+      series: series
+    };
+  }
+  function recoveryOption(rows) {
+    var first = null;
+    algoOrder.forEach(function (a) {
+      if (!first && rows[a]) first = rows[a];
+    });
+    var gens = Object.keys(first || {}).map(Number).sort(function (a, b) { return a - b; });
+    var series = algoOrder.map(function (a) {
+      return {
+        name: algoLabel[a], type: "line", smooth: false,
+        symbol: "circle", symbolSize: 5,
+        lineStyle: { width: 2 }, itemStyle: { color: algoColor[a] },
+        data: gens.map(function (g) {
+          return (rows[a] && rows[a][g] != null) ? rows[a][g] : null;
+        })
+      };
+    });
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { top: 6, textStyle: { fontSize: 11 } },
+      grid: grid(),
+      xAxis: { type: "category", data: gens, name: "环境变化后代数",
+        nameLocation: "middle", nameGap: 30 },
+      yAxis: { type: "value", name: "IGD (↓)",
+        splitLine: { lineStyle: { color: palette.line } } },
+      series: series
+    };
+  }
+  function sensitivityOption(rows) {
+    var nStudy = rows.filter(function (r) { return r.n_t === 20; })
+      .sort(function (a, b) { return a.N - b.N; });
+    var ntStudy = rows.filter(function (r) { return r.N === 100; })
+      .sort(function (a, b) { return a.n_t - b.n_t; });
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { top: 6, textStyle: { fontSize: 11 } },
+      grid: grid(),
+      xAxis: [
+        { type: "category", data: nStudy.map(function (r) { return "N=" + r.N; }),
+          position: "bottom", name: "种群规模 N (n_t=20)" },
+        { type: "category", data: ntStudy.map(function (r) { return "n_t=" + r.n_t; }),
+          position: "top", show: false }
+      ],
+      yAxis: { type: "value", name: "MIGD (↓)",
+        splitLine: { lineStyle: { color: palette.line } } },
+      series: [
+        { name: "MIGD vs N", type: "line", xAxisIndex: 0,
+          data: nStudy.map(function (r) { return r.MIGD; }),
+          smooth: true, lineStyle: { width: 2.5 },
+          itemStyle: { color: palette.rose }, symbol: "circle", symbolSize: 8 },
+        { name: "MIGD vs n_t", type: "line", xAxisIndex: 1,
+          data: ntStudy.map(function (r) { return r.MIGD; }),
+          smooth: true, lineStyle: { width: 2.5, type: "dashed" },
+          itemStyle: { color: palette.blue }, symbol: "circle", symbolSize: 8 }
+      ]
+    };
+  }
+  function boxplotOption(data) {
+    var taus = Object.keys(data).sort(function (a, b) { return Number(a) - Number(b); });
+    var categories = taus.reduce(function (acc, t) {
+      return acc.concat(algoOrder.map(function (a) { return algoLabel[a]; }));
+    }, []);
+    var xLabels = taus.reduce(function (acc, t) {
+      return acc.concat(algoOrder.map(function (a) {
+        return (a === algoOrder[0]) ? "τ=" + t : "";
+      }));
+    }, []);
+    var boxData = taus.reduce(function (acc, t) {
+      return acc.concat(algoOrder.map(function (a) { return data[t][a] || []; }));
+    }, []);
+    return {
+      tooltip: { trigger: "item" },
+      legend: { show: false },
+      grid: { left: 60, right: 30, top: 30, bottom: 60, containLabel: true },
+      xAxis: { type: "category", data: categories,
+        axisLabel: { fontSize: 9, rotate: 45, interval: 0 }, axisTick: { show: false } },
+      yAxis: { type: "value", name: "MIGD (↓)",
+        splitLine: { lineStyle: { color: palette.line } } },
+      series: [{
+        name: "MIGD", type: "boxplot", data: boxData,
+        itemStyle: { color: "#eef2ff", borderColor: palette.blue },
+        emphasis: { itemStyle: { borderColor: palette.rose } }
+      }]
+    };
+  }
+  function setupCharts() {
+    if (!window.echarts) return;
+    var instances = [];
+    document.querySelectorAll("[data-chart]").forEach(function (block) {
+      var canvas = block.querySelector(".chart-canvas");
+      var dataId = block.getAttribute("data-data");
+      var chartKind = block.getAttribute("data-chart");
+      var rows = readJson(dataId);
+      if (!canvas || !rows) return;
+      var chart = echarts.init(canvas, null, { renderer: "canvas" });
+      function optionFor() {
+        if (chartKind === "migd-bar") return migdBarOption(rows);
+        if (chartKind === "mig-time") return migTimeOption(rows);
+        if (chartKind === "ablation") return ablationOption(rows);
+        if (chartKind === "recovery") return recoveryOption(rows);
+        if (chartKind === "sensitivity") return sensitivityOption(rows);
+        if (chartKind === "boxplot") return boxplotOption(rows);
+        return {};
+      }
+      chart.setOption(optionFor(), true);
+      instances.push(chart);
+    });
+    window.addEventListener("resize", function () {
+      instances.forEach(function (chart) { chart.resize(); });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", setupCharts);
+})();
+</script>"""
 
 html = f"""<!-- Generated by Trae Work -->
 <!DOCTYPE html>
@@ -163,10 +411,11 @@ html = f"""<!-- Generated by Trae Work -->
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.1</title>
-<link rel="stylesheet" href="assets/doc.css" />
-<script src="assets/echarts.min.js"></script>
-<script src="assets/doc.js" defer></script>
+<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.4</title>
+<style>
+{DOC_CSS}
+</style>
+<script>{ECHARTS_JS}</script>
 <style>
   .chart-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
   .chart-grid .doc-chart {{ margin-bottom: 0; }}
@@ -691,7 +940,7 @@ html = f"""<!-- Generated by Trae Work -->
 <div class="wheel-floating-label" id="wheelFloatingLabel"></div>
 <main class="doc-page">
   <header class="doc-cover" id="cover">
-    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.1</div>
+    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.4</div>
     <h1>LDT-NSGA-II 算法完整实验结果</h1>
     <div class="doc-cover-subtitle">
       面向 FDA / dMOP 测试集的对比、消融、敏感性、Friedman 统计检验与恢复速度分析
@@ -763,9 +1012,9 @@ html = f"""<!-- Generated by Trae Work -->
         <tr><td>FDA1</td><td>DMOP</td><td>PS 旋转，PF 固定</td><td>2</td></tr>
         <tr><td>FDA3</td><td>DMOP</td><td>PF 形状随时间变化</td><td>2</td></tr>
         <tr><td>FDA4</td><td>DMOP</td><td>多模态，PS/PF 联动</td><td>3</td></tr>
-        <tr><td>dMOP1</td><td>DMOP</td><td>PF 平移</td><td>2</td></tr>
-        <tr><td>dMOP2</td><td>DMOP</td><td>PS 旋转 + PF 变形</td><td>2</td></tr>
-        <tr><td>dMOP3 <span class="pill">v2.1</span></td><td>DMOP</td><td>静态 POS + 时变 POF</td><td>2</td></tr>
+        <tr><td>dMOP1</td><td>DMOP</td><td>PS 平移，PF 固定</td><td>2</td></tr>
+        <tr><td>dMOP2</td><td>DMOP</td><td>PS 平移 + PF 随 G 平移</td><td>2</td></tr>
+        <tr><td>dMOP3 <span class="pill">v2.4</span></td><td>DMOP</td><td>静态 POS + 静态 POF（控制组）</td><td>2</td></tr>
       </tbody>
     </table>
     <h3>2.2 算法参数</h3>
@@ -1418,6 +1667,7 @@ html = f"""<!-- Generated by Trae Work -->
 </html>
 """
 
-out = ROOT / "ldmt-experiment-report" / "index.html"
-out.write_text(html, encoding="utf-8")
+out = OUT_PATH
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(html + _CHART_JS, encoding="utf-8")
 print(f"written {out}  size={out.stat().st_size} bytes")

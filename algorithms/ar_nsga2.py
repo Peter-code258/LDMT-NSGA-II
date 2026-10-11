@@ -14,20 +14,28 @@ from .environment_manager import ChangeDetector
 
 
 class ARNSGA2:
-    name = "AR_NSGA2"
+    name = "ar1_predictive"
 
     def __init__(self, history_len=5, immigrant_ratio=0.2, n_probes=10):
         self.history_len = int(history_len)
         self.immigrant_ratio = float(immigrant_ratio)
+        # v2.4: n_probes was accepted but never stored — _ensure_probe would
+        # crash with AttributeError on problems without a shared probe.
+        self.n_probes = int(n_probes)
         self.mu_history = []
         self.sigma_history = []
         self.fallback_count = 0
         self._probe = None
         self._prev_probe_F = None
 
-    def _ensure_probe(self, prev_X, D):
-        if self._probe is None or self._probe.shape[1] != D:
-            self._probe = np.clip(prev_X[:min(10, len(prev_X))], 0, 1)
+    def _ensure_probe(self, prev_X, problem):
+        shared = getattr(problem, "probe", None)
+        if shared is not None:
+            self._probe = np.asarray(shared, dtype=float)
+            return self._probe
+        if self._probe is None or self._probe.shape[1] != prev_X.shape[1]:
+            n = min(self.n_probes, prev_X.shape[0])
+            self._probe = np.asarray(prev_X[:n], dtype=float).copy()
         return self._probe
 
     def _detect_change(self, problem):
@@ -53,7 +61,7 @@ class ARNSGA2:
         nd_mask = non_dominated_set(prev_X, prev_F)
         nd_X = prev_X[nd_mask] if nd_mask.sum() > 0 else prev_X
         mu_prev, sigma_prev = extract_features(nd_X, xl, xu)
-        self._ensure_probe(prev_X, D)
+        self._ensure_probe(prev_X, problem)
         Dk = self._detect_change(problem)
         # predict mu_hat
         self.mu_history.append(mu_prev)
@@ -97,12 +105,19 @@ class ARNSGA2:
         Z = normalize(prev_X, xl, xu)
         z_new = np.clip(mu_hat + (Z - mu_prev), 0.0, 1.0)
         new_X = denormalize(z_new, xl, xu)
-        # immigrants
+        # immigrants (K1 fix): reserve room BEFORE appending so random
+        # immigrants survive _resize. Previously "shift N rows + append
+        # immigrants + truncate to first N" dropped every immigrant, making
+        # immigrant_ratio a dead parameter (pure-prediction behaviour).
         n_imm = int(round(self.immigrant_ratio * N))
         immigrants = rng.uniform(xl, xu, size=(n_imm, D))
-        new_X = np.concatenate([new_X, immigrants], axis=0)
+        new_X = np.concatenate([new_X[:N - n_imm], immigrants], axis=0)
         new_X = self._resize(new_X, N, xl, xu, rng)
-        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": 0.0,
+        # v2.4 (K9 fix): real diagnostic instead of hard-coded 0.0 — fraction
+        # of individuals sitting ON the variable bounds after the response.
+        bclip = float(np.mean(np.any(
+            (new_X <= xl + 1e-9) | (new_X >= xu - 1e-9), axis=1)))
+        return new_X, {"lambda_k": 1.0, "boundary_clip_ratio": bclip,
                          "n_nd": int(nd_mask.sum()), "fallback": fallback,
                          "Dk": Dk}
 
