@@ -76,6 +76,60 @@ def _pf_dmop3(P):
     return np.column_stack([u, f2])
 
 
+# ---------------------------------------------------------------------------
+# v2.5: authoritative dMOP1-3 (Goh & Tan 2009) reference fronts.
+#
+# Types and formulas were re-verified online against three independent
+# peer-reviewed reproductions (see 文档/论文材料/_audit/dmop_definitions.md).
+# An EARLIER draft of this project had dMOP1 mis-classified as Type I with a
+# sqrt front; that was wrong and is corrected here.
+#
+#   dMOP1 (auth.): **Type III** -- POS static, POF time-varying.
+#                  g = 1 + 9*sum_{i>=2} x_i^2  (NO G(t)),  f1 = x_1,
+#                  f2 = g*(1 - (f1/g)^H(t)).
+#                  PS = {(x_1, 0, ..., 0)}  (TIME-INVARIANT)
+#                  PF(t) = {(u, 1 - u^H(t))}  (TIME-VARYING)
+#
+#   dMOP2 (auth.): **Type II** -- both POS and POF move.
+#                  g = 1 + 9*sum_{i>=2} (x_i - G(t))^2,  G(t) = sin(0.5*pi*t),
+#                  f2 = g*(1 - (f1/g)^H(t)).
+#                  PS(t) = {(x_1, G(t), ..., G(t))}   PF(t) = {(u, 1 - u^H(t))}
+#
+#   dMOP3 (auth.): **Type I** -- POS moves, POF static.
+#                  g = 1 + 9*sum_{i != r} (x_i - G(t))^2,  f1 = x_r,
+#                  f2 = g*(1 - sqrt(f1/g)),  G(t) = |sin(0.5*pi*t)| (variant A).
+#                  PS(t) = {x_r in [0,1], x_i = G(t) for i != r}
+#                  PF = {(u, 1 - sqrt(u))}  (TIME-INVARIANT)
+#
+# H(t) = 0.75*sin(0.5*pi*t) + 1.25 for dMOP1 and dMOP2.
+# ---------------------------------------------------------------------------
+
+
+def _H_authoritative(t):
+    return 0.75 * np.sin(0.5 * np.pi * t) + 1.25
+
+
+def _pf_dmop1_authoritative(t, P):
+    """Type III front of the authoritative dMOP1: {(u, 1 - u^H(t))}."""
+    H = _H_authoritative(t)
+    u = np.clip(np.linspace(0.0, 1.0, P), 0.0, 1.0)
+    return np.column_stack([u, 1.0 - u ** H])
+
+
+def _pf_dmop2_authoritative(t, P):
+    """Type II front of the authoritative dMOP2: {(u, 1 - u^H(t))}."""
+    H = _H_authoritative(t)
+    u = np.clip(np.linspace(0.0, 1.0, P), 0.0, 1.0)
+    return np.column_stack([u, 1.0 - u ** H])
+
+
+def _pf_dmop3_authoritative(P):
+    """Type I front of the authoritative dMOP3: {(u, 1 - sqrt(u))}, static."""
+    u = np.linspace(0.0, 1.0, P)
+    return np.column_stack([u, 1.0 - np.sqrt(np.maximum(u, 0.0))])
+
+
+
 def get_true_pf(problem_name, M=None, n_points=500, t=None):
     """Return the (P, M) reference Pareto front for a problem.
 
@@ -84,7 +138,7 @@ def get_true_pf(problem_name, M=None, n_points=500, t=None):
     """
     name = problem_name.upper()
     if M is None:
-        M = 2 if name in ("FDA1", "FDA3", "DMOP1", "DMOP2", "DMOP3") else 3
+        M = 3 if name in ("FDA4", "FDA5") else 2
     t_bucket = None if t is None else round(float(t), 6)
     key = (name, M, int(n_points), t_bucket)
     if key in _CACHE:
@@ -104,6 +158,14 @@ def get_true_pf(problem_name, M=None, n_points=500, t=None):
         pf = _pf_dmop2(tt, n_points)
     elif name == "DMOP3":
         pf = _pf_dmop3(n_points)
+    elif name == "DMOP1A":
+        tt = 0.0 if t is None else float(t)
+        pf = _pf_dmop1_authoritative(tt, n_points)
+    elif name == "DMOP2A":
+        tt = 0.0 if t is None else float(t)
+        pf = _pf_dmop2_authoritative(tt, n_points)
+    elif name == "DMOP3A":
+        pf = _pf_dmop3_authoritative(n_points)
     else:
         raise ValueError(f"Unknown problem name: {problem_name}")
 

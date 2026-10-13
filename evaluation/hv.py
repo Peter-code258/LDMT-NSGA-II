@@ -26,6 +26,12 @@ REF_POINTS = {
     "FDA4": np.array([1.1, 1.1, 1.1]),
     "DMOP1": np.array([1.1, 1.1]),
     "DMOP2": np.array([2.2, 1.1]),
+    # v2.5 authoritative dMOPs.  dMOP1A / dMOP2A have g == 1 on the PS, so the
+    # front lives in [0,1]^2 (dMOP2A's f2 max is 1 at u -> 0).  dMOP3A's front
+    # has f2 >= 1 - sqrt(u) - u >= -0.5 on [0,1], so (1.1, 1.1) bounds it.
+    "DMOP1A": np.array([1.1, 1.1]),
+    "DMOP2A": np.array([1.1, 1.1]),
+    "DMOP3A": np.array([1.1, 1.1]),
 }
 
 

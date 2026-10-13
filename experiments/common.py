@@ -20,9 +20,10 @@ from typing import List, Optional
 
 import numpy as np
 
-from problems import FDA1, FDA3, FDA4, DMOP1, DMOP2, DMOP3
+from problems import (FDA1, FDA3, FDA4, DMOP1, DMOP2, DMOP3,
+                      DMOP1A, DMOP2A, DMOP3A)
 from algorithms import (NSGA2Static, DNSGA2Response, ARNSGA2, GMMTransfer,
-                         LDTNSGA2, PPSNSGA2, DynamicDriver)
+                         LDTNSGA2, LDTNSGA2Alpha1, PPSNSGA2, DynamicDriver)
 
 PROBLEM_REGISTRY = {
     "FDA1": FDA1,
@@ -31,6 +32,10 @@ PROBLEM_REGISTRY = {
     "DMOP1": DMOP1,
     "DMOP2": DMOP2,
     "DMOP3": DMOP3,
+    # v2.5: authoritative dMOP1/2/3 of Goh & Tan (2009)
+    "DMOP1A": DMOP1A,
+    "DMOP2A": DMOP2A,
+    "DMOP3A": DMOP3A,
 }
 
 # CLI name -> class. Each class has ONE canonical id (.name attribute).
@@ -42,6 +47,10 @@ ALGORITHM_REGISTRY = {
     "gmm_inspired": GMMTransfer,
     "pps": PPSNSGA2,
     "ldt_nsga2": LDTNSGA2,
+    # v2.5 experimental variant: LDT with FULL-STEP trend extrapolation
+    # (alpha=1.0). Deliberately NOT part of CANONICAL_ALGOS so that every
+    # existing v2.4 artefact and default experiment list stays unchanged.
+    "ldt_alpha1": LDTNSGA2Alpha1,
     # human-readable CLI names
     "NSGA-II": NSGA2Static,               # static baseline (no migrants)
     "DNSGA-II-inspired": DNSGA2Response,  # random-immigrant response

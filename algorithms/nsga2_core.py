@@ -54,7 +54,12 @@ def _row_metrics(F, problem_name, problem, n_points):
     """Compute IGD/HV for the current population objectives."""
     M = F.shape[1]
     t = problem.t
-    if problem_name.upper() in ("FDA3", "DMOP2"):
+    # Time-varying reference fronts.  NOTE the DMOP1A case: the authoritative
+    # dMOP1 is a TYPE III problem (Pareto SET static, Pareto FRONT rotating
+    # with H(t)), so its front must be regenerated for the current t exactly
+    # like FDA3 (Type II) and dMOP2/DMOP2A.  Using the t=0 front here would
+    # systematically overstate IGD on dMOP1.
+    if problem_name.upper() in ("FDA3", "DMOP2", "DMOP1A", "DMOP2A"):
         ref = get_true_pf(problem_name, M=M, n_points=n_points, t=t)
     else:
         ref = get_true_pf(problem_name, M=M, n_points=n_points)

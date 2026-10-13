@@ -235,5 +235,26 @@ class LDTNSGA2:
         return X
 
 
+class LDTNSGA2Alpha1(LDTNSGA2):
+    """LDT-NSGA-II with the FULL-STEP trend extrapolation (alpha = 1.0).
+
+    Motivation (v2.5 experiment): the v2.4 sensitivity study found that the
+    default half-step coefficient alpha=0.5 is systematically outperformed by
+    the full-step first-order difference alpha=1.0 on all three FDA problems
+    (see ``sensitivity_alpha_*`` CSVs). This subclass pins alpha=1.0 with a
+    distinct canonical id so the effect of the extrapolation STEP SIZE can be
+    separated from the effect of the moment-transfer PARADIGM itself, without
+    altering any existing v2.4 artefact.
+
+    Behaviour is otherwise byte-for-byte identical to :class:`LDTNSGA2`: same
+    feature extraction, same sigma floor, same 50/20/30 composition, same
+    single denormalization. Only ``trend_alpha`` differs.
+    """
+    name = "ldt_alpha1"
+
+    def __init__(self, trend_alpha=1.0, **kwargs):
+        super().__init__(trend_alpha=trend_alpha, **kwargs)
+
+
 # Backward-compatible alias for existing experiment scripts
 LDMTNSGA2 = LDTNSGA2

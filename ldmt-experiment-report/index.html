@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.4</title>
+<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.5</title>
 <style>
 :root {
   --page: #ffffff;
@@ -1243,9 +1243,47 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     border-radius: 10px;
     border: 2px solid rgba(255,255,255,.5);
   }
+
+  /* ===== 图表动画控制条 ===== */
+  .chart-ctl {
+    position: fixed; right: 28px; bottom: 88px; z-index: 9998;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 14px;
+    background: rgba(255,255,255,.94);
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 28px rgba(15,23,42,.14);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+    transition: opacity .3s ease, transform .3s ease;
+  }
+  .chart-ctl.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .chart-ctl .ctl-label {
+    font-size: 11px; letter-spacing: .08em; color: var(--muted);
+    text-transform: uppercase; padding: 0 4px 0 2px; white-space: nowrap;
+  }
+  .chart-ctl button {
+    font: 600 12px/1 inherit; color: #1e293b;
+    background: var(--soft); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 11px; cursor: pointer;
+    white-space: nowrap;
+    transition: background .2s, border-color .2s, color .2s, transform .1s;
+  }
+  .chart-ctl button:hover { background: #eef2ff; border-color: #c7d2fe; }
+  .chart-ctl button:active { transform: translateY(1px); }
+  .chart-ctl button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (max-width: 780px) {
+    .chart-ctl { right: 14px; bottom: 84px; gap: 6px; padding: 7px 8px; }
+    .chart-ctl .ctl-label { display: none; }
+  }
 </style>
 </head>
 <body>
+<div class="chart-ctl" id="chartCtl">
+  <span class="ctl-label">图表动画</span>
+  <button id="chartPlay" type="button" title="播放 / 继续当前可见图表的动画">▶ 播放</button>
+  <button id="chartPause" type="button" title="暂停当前可见图表的动画">⏸ 暂停</button>
+  <button id="chartReplay" type="button" title="重播当前可见图表的动画">⟲ 重播</button>
+</div>
 <div class="scroll-progress" id="scrollProgress"></div>
 <button class="back-to-top" id="backToTop" aria-label="回到顶部" title="回到顶部">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
@@ -1256,7 +1294,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     <div class="wheel-track" id="wheelTrack">
       <a class="wheel-btn" href="#executive" data-index="0"><span class="wb-num">01</span><span class="wb-label">核心结论</span></a>
       <a class="wheel-btn" href="#setup" data-index="1"><span class="wb-num">02</span><span class="wb-label">实验设置</span></a>
-      <a class="wheel-btn" href="#v21" data-index="2"><span class="wb-num">03</span><span class="wb-label">v2.1扩展</span></a>
+      <a class="wheel-btn" href="#v21" data-index="2"><span class="wb-num">03</span><span class="wb-label">v2.5扩展</span></a>
       <a class="wheel-btn" href="#main-results" data-index="3"><span class="wb-num">04</span><span class="wb-label">主对比</span></a>
       <a class="wheel-btn" href="#friedman" data-index="4"><span class="wb-num">05</span><span class="wb-label">统计检验</span></a>
       <a class="wheel-btn" href="#recovery" data-index="5"><span class="wb-num">06</span><span class="wb-label">恢复曲线</span></a>
@@ -1272,15 +1310,15 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
 <div class="wheel-floating-label" id="wheelFloatingLabel"></div>
 <main class="doc-page">
   <header class="doc-cover" id="cover">
-    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.4</div>
+    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.5</div>
     <h1>LDT-NSGA-II 算法完整实验结果</h1>
     <div class="doc-cover-subtitle">
-      面向 FDA / dMOP 测试集的对比、消融、敏感性、Friedman 统计检验与恢复速度分析
+      面向 FDA1/FDA3/FDA4 与 DMOP1/DMOP2/DMOP3 测试集的对比、消融、敏感性、Friedman 统计检验与恢复速度分析
     </div>
     <div class="doc-cover-meta">
       <div><span>算法</span><strong>LDT-NSGA-II</strong></div>
       <div><span>基线</span><strong>NSGA-II · DNSGA-II-inspired · AR1-Predictive · GMM-inspired · PPS</strong></div>
-      <div><span>测试问题</span><strong>FDA1 / FDA3 / FDA4 / dMOP1 / dMOP2 / dMOP3</strong></div>
+      <div><span>测试问题</span><strong>FDA1 / FDA3 / FDA4 / DMOP1 / DMOP2 / DMOP3</strong></div>
       <div><span>重复次数</span><strong>30 次 / 组</strong></div>
       <div><span>统计检验</span><strong>Wilcoxon+Holm · Friedman+Nemenyi</strong></div>
     </div>
@@ -1301,19 +1339,20 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   <section id="executive" class="doc-block">
     <h2>1. 核心结论</h2>
     <p>
-      本报告系统评估了 <strong>LDMT-NSGA-II</strong>（基于低维流形迁移的动态多目标进化算法）
-      在 5 个标准动态多目标测试问题、3 种变化频率下的性能，并与 DNSGA-II、AR-NSGA-II、
-      GMM-Transfer 三个基线进行对比。全部实验每组独立重复 30 次，共
-      <span class="key-stat">536,700</span> 行原始评估记录。
+      本报告系统评估了 <strong>LDT-NSGA-II</strong>（Lightweight Distribution-Transfer NSGA-II，轻量级分布迁移）
+      在 FDA1/FDA3/FDA4 与 DMOP1/DMOP2/DMOP3 共 6 个动态多目标测试问题、3 种变化频率下的性能，并与
+      NSGA-II (static)、DNSGA-II-inspired、AR1-Predictive、GMM-inspired、PPS 共 5 个基线进行对比。
+      四组实验共 3780 次独立运行（0 失败、126 个 CSV 结果文件），逐代记录约
+      <span class="key-stat">1,134,000</span> 行；每组独立重复 30 次（种子 0–29）。
     </p>
     <div class="doc-callout is-tip">
-      <strong>关键发现：</strong>LDMT-NSGA-II 在 FDA1/3/4 × τ∈(10, 25, 50) 共
-      <span class="key-stat">9 个</span>主对比组合中，取得
-      <span class="key-stat">6 / 9</span> 个 MIGD 最优与 <span class="key-stat">6 / 9</span> 个 MHV 最优
-      （其余由 AR-NSGA-II 取得），整体平均 MIGD（0.0378）为四者最低。
-      相比 GMM-Transfer，LDMT 的迁移阶段平均提速
+      <strong>关键发现：</strong>在 FDA1/3/4 × τ∈(10, 25, 50) 共
+      <span class="key-stat">9 个</span>主对比组合中，LDT-NSGA-II 取得
+      <span class="key-stat">0 / 9</span> 个 MIGD 最优与 <span class="key-stat">0 / 9</span> 个 MHV 最优
+      ——全部 9 个组合的最优值均由 PPS 取得。LDT-NSGA-II 的整体平均 MIGD（0.0386）在六个算法中位列第二，
+      仅次于 PPS（0.0363）。相比 GMM-inspired，LDT-NSGA-II 的迁移阶段平均提速
       <span class="key-stat">9.5×</span>（FDA1 9.0×, FDA3 9.6×, FDA4 9.8×），
-      同时保持更优或相当的收敛质量。
+      同时保持更优的收敛质量。
     </div>
     <div class="doc-metrics">
       <div class="doc-metric">
@@ -1329,8 +1368,8 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
         <div class="doc-metric-label">每组独立重复</div>
       </div>
       <div class="doc-metric">
-        <div class="doc-metric-value">536.7k</div>
-        <div class="doc-metric-label">原始评估行</div>
+        <div class="doc-metric-value">1.13M</div>
+        <div class="doc-metric-label">逐代评估记录行</div>
       </div>
     </div>
   </section>
@@ -1344,9 +1383,9 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
         <tr><td>FDA1</td><td>DMOP</td><td>PS 旋转，PF 固定</td><td>2</td></tr>
         <tr><td>FDA3</td><td>DMOP</td><td>PF 形状随时间变化</td><td>2</td></tr>
         <tr><td>FDA4</td><td>DMOP</td><td>多模态，PS/PF 联动</td><td>3</td></tr>
-        <tr><td>dMOP1</td><td>DMOP</td><td>PS 平移，PF 固定</td><td>2</td></tr>
-        <tr><td>dMOP2</td><td>DMOP</td><td>PS 平移 + PF 随 G 平移</td><td>2</td></tr>
-        <tr><td>dMOP3 <span class="pill">v2.4</span></td><td>DMOP</td><td>静态 POS + 静态 POF（控制组）</td><td>2</td></tr>
+        <tr><td>DMOP1</td><td>DMOP</td><td>PS 平移，PF 固定</td><td>2</td></tr>
+        <tr><td>DMOP2（项目变体，非标准 dMOP2）</td><td>DMOP</td><td>PS 平移 + PF 随 G 平移</td><td>2</td></tr>
+        <tr><td>DMOP3 <span class="pill">v2.4</span></td><td>DMOP</td><td>静态 POS + 静态 POF（静态对照组）</td><td>2</td></tr>
       </tbody>
     </table>
     <h3>2.2 算法参数</h3>
@@ -1356,7 +1395,10 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
         <tr><td>种群规模 N</td><td>100</td><td>主对比统一</td></tr>
         <tr><td>环境变化间隔 τ<sub>t</sub></td><td>10 / 25 / 50</td><td>变化频率</td></tr>
         <tr><td>每个环境代数 n<sub>t</sub></td><td>20</td><td>主对比统一</td></tr>
-        <tr><td>迁移比例 ρ / 保留 κ / 随机</td><td>0.5 / 0.2 / 0.3</td><td>LDT 50/20/30 组成</td></tr>
+        <tr><td>总进化代数 n<sub>gen</sub></td><td>300</td><td>每次独立运行</td></tr>
+        <tr><td>随机种子</td><td>0–29</td><td>每组 30 次独立重复</td></tr>
+        <tr><td>每环境评价预算</td><td>N × τ<sub>t</sub></td><td>各环境严格相等</td></tr>
+        <tr><td>迁移比例 ρ / 保留 κ / 随机</td><td>0.5 / 0.2 / 0.3</td><td>LDT-NSGA-II 的 50/20/30 组成</td></tr>
         <tr><td>趋势系数 α</td><td>0.5</td><td>线性外推 mu_hat</td></tr>
         <tr><td>交叉 / 变异概率</td><td>0.9 / 1/n</td><td>SBX + 多项式变异</td></tr>
         <tr><td>评价指标</td><td>MIGD / MHV / postMIGD / 恢复代数</td><td>越低 / 越高 / 越低 / 越少</td></tr>
@@ -1364,15 +1406,15 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     </table>
     <div class="doc-note">
       <strong>统计检验：</strong>所有均值差异经 Wilcoxon 秩和检验（α = 0.05）验证，
-      报告中标注 <span class="pill">†</span> 表示该组合的最优值。v2.1 新增
+      报告中标注 <span class="pill">†</span> 表示该组合的最优值。v2.5 采用
       <strong>Friedman + Nemenyi 后验检验</strong>用于多算法多问题整体排序。
     </div>
   </section>
 
   <section id="v21" class="doc-block">
-    <h2>3. v2.1 算法扩展</h2>
+    <h2>3. v2.5 算法扩展</h2>
     <p>
-      在 v2.0（开题报告 2.0 内核）基础上，v2.1 引入三个可选模块与两项分析增强，
+      在核心 LDT-NSGA-II（轻量级分布迁移）内核基础上，本版本（v2.5）引入三个可选模块与两项分析增强，
       全部默认关闭以保持核心算法稳定，可通过参数开启进行对比研究。
     </p>
     <table class="doc-table">
@@ -1381,8 +1423,8 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
         <tr><td><strong>PPS 基线</strong></td><td>—</td>
           <td>种群中心一阶差分外推预测 + 20% 随机移民（Zhou et al. 2014）</td>
           <td><span class="pill">新增基线</span></td></tr>
-        <tr><td><strong>dMOP3 问题</strong></td><td>—</td>
-          <td>静态 POS + 时变 POF，丰富变化类型覆盖</td>
+        <tr><td><strong>DMOP3 问题</strong></td><td>—</td>
+          <td>静态 POS + 静态 POF，作为静态对照组覆盖变化类型</td>
           <td><span class="pill">新增问题</span></td></tr>
         <tr><td><strong>Friedman + Nemenyi</strong></td><td>α=0.05</td>
           <td>多算法多问题排序检验，补充 Wilcoxon 两两对比</td>
@@ -1402,13 +1444,13 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </tbody>
     </table>
     <div class="doc-callout is-tip">
-      <strong>验证状态：</strong>v2.1 全部 29 个单元测试通过（含 9 个新特性测试）；
-      PPS 与 dMOP3 已在快速冒烟实验中验证端到端运行正常。
+      <strong>验证状态：</strong>v2.5 全部 63 个单元测试通过；
+      PPS 与 DMOP3 已在快速冒烟实验中验证端到端运行正常。
     </div>
   </section>
 
   <section id="friedman" class="doc-block">
-    <h2>4. Friedman + Nemenyi 统计检验 <span class="pill">v2.1</span></h2>
+    <h2>4. Friedman + Nemenyi 统计检验 <span class="pill">v2.5</span></h2>
     <p>
       Friedman 检验用于判断多个算法在多个问题上的排序是否存在显著差异；
       若显著，Nemenyi 后验检验给出临界差异（CD），排名差超过 CD 即认为差异显著。
@@ -1440,7 +1482,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   </section>
 
   <section id="recovery-speed" class="doc-block">
-    <h2>5. 恢复速度分析 <span class="pill">v2.1</span></h2>
+    <h2>5. 恢复速度分析 <span class="pill">v2.5</span></h2>
     <p>
       恢复代数（Recovery Generations）定义为环境变化后，种群 IGD 恢复到
       变化前最后一代水平所需的代数。该指标直接量化算法在动态环境中的响应速度。
@@ -1473,17 +1515,19 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </table>
     </div>
     <div class="chart-analysis">
-      <p><strong>解读：</strong>恢复代数越小，算法响应越快。LDMT/LDT 系列
-        相比 DNSGA-II（无迁移）恢复代数显著更低，验证了分布迁移对快速跟踪
-        新前沿的贡献。完整数据见 results/summary/recovery_generations.csv。</p>
+      <p><strong>解读：</strong>恢复代数越小，算法响应越快。本报告中 PPS 恢复代数最低
+        （FDA1 10.29、FDA3 13.97、FDA4 9.65），AR1-Predictive 次之；
+        LDT-NSGA-II 相比无迁移的 DNSGA-II-inspired 恢复代数略低
+        （FDA1 21.29 vs 21.98，FDA3 21.64 vs 22.13，FDA4 18.50 vs 20.67），
+        体现分布迁移对快速跟踪新前沿的贡献。完整数据见 results/summary/recovery_generations.csv。</p>
     </div>
   </section>
 
   <section id="main-results" class="doc-block">
     <h2>6. 主对比实验</h2>
     <p>
-      下表汇总了 4 种算法在所有问题与变化频率下的 MIGD（均值 ± 标准差）、MHV、
-      环境切换后首代 IGD（postMIGD）以及单代/迁移耗时。
+      下表汇总了 6 种算法（LDT-NSGA-II 与 5 个基线）在 FDA1/FDA3/FDA4 与 3 种变化频率下的
+      MIGD（均值 ± 标准差）、MHV、环境切换后首代 IGD（postMIGD）以及单代/迁移耗时。
     </p>
     <div class="doc-table-wrapper">
       <table class="doc-table is-zebra is-hover">
@@ -1553,7 +1597,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </table>
     </div>
 
-    <h3>3.1 MIGD 对比图</h3>
+    <h3>6.1 MIGD 对比图</h3>
     <div class="doc-chart" data-chart="migd-bar" data-data="data-migd-bar">
       <div class="chart-canvas" style="height:380px"></div>
       <div class="chart-caption">
@@ -1561,28 +1605,31 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </div>
     </div>
     <div class="chart-analysis">
-      <p><strong>观测：</strong>如图 1 所示，LDMT-NSGA-II（红色柱）在
-        <span class="key-stat">6 / 9</span> 个组合中取得最低 MIGD，
-        其余 3 个组合由 AR-NSGA-II 最优；DNSGA-II 与 GMM-Transfer 在所有组合中均未取得最优。
-        就整体均值而言，LDMT 的平均 MIGD 为 <span class="key-stat">0.0378</span>，
-        低于 DNSGA-II（0.0422）、GMM-Transfer（0.0453）与 AR-NSGA-II（0.0460）。</p>
-      <p><strong>分问题分析：</strong>在 FDA1 与 FDA3 上，LDMT 与 AR-NSGA-II 性能接近，
-        二者显著优于 DNSGA-II 与 GMM-Transfer；在多模态的 FDA4 上，LDMT 优势最为明显，
-        其 MIGD（0.0866）比次优的 GMM-Transfer（0.0912）低约 5%，比 DNSGA-II 低 7%。</p>
-      <p><strong>变化频率影响：</strong>随 τ<sub>t</sub> 从 50 降至 10（变化加快），所有算法的 MIGD 均呈上升趋势，
-        但 LDMT 的增幅最小，表明其在快变环境下收敛更稳健。这得益于迁移映射能在环境切换瞬间提供高质量初始种群，
-        而非依赖重新搜索。</p>
-      <p><strong>结论：</strong>LDMT-NSGA-II 在收敛精度上全面领先，尤其在高难度、快变化场景下优势突出；
-        AR-NSGA-II 作为基于预测的迁移策略在部分简单问题上与 LDMT 持平，但其对预测准确性的依赖使其在 FDA4 上表现受限。</p>
+      <p><strong>观测：</strong>如图 1 所示，9 个组合中最低 MIGD 全部由 PPS（绿色柱）取得
+        （表中以 <span class="pill">†</span> 标注，共 <span class="key-stat">9 / 9</span>）；
+        LDT-NSGA-II（红色柱）未取得最优，但在多数组合中位列第二，平均 MIGD 为
+        <span class="key-stat">0.0386</span>，仅次于 PPS（0.0363），优于 AR1-Predictive（0.0426）、
+        GMM-inspired（0.0452）、DNSGA-II-inspired（0.0460）与 NSGA-II (static)（0.0510）。</p>
+      <p><strong>分问题分析：</strong>在 FDA1 与 FDA3 上，PPS 与 AR1-Predictive 最优，LDT-NSGA-II 紧随其后；
+        在多模态的 FDA4 上，PPS 优势最明显（平均 MIGD 0.0928），LDT-NSGA-II（0.0962）次之，
+        明显优于 AR1-Predictive（0.1080）、GMM-inspired（0.1121）、DNSGA-II-inspired（0.1138）与
+        NSGA-II (static)（0.1295）。</p>
+      <p><strong>变化频率影响：</strong>随 τ<sub>t</sub> 从 50 降至 10（变化加快），所有算法的 MIGD 均显著上升，
+        其中 PPS 增幅最小（+70%），LDT-NSGA-II 次之（+84%），其余算法增幅均在 +120% 以上
+        （NSGA-II (static) 更高达 +189%）。这表明 LDT-NSGA-II 在快变环境下保持相对稳健，
+        得益于迁移映射能在环境切换瞬间提供高质量初始种群，而非依赖重新搜索。</p>
+      <p><strong>结论：</strong>LDT-NSGA-II 的平均收敛精度在六个算法中位列第二，仅次于 PPS，
+        并显著优于其余四个基线；AR1-Predictive 作为基于预测的迁移策略在部分简单问题上与 LDT-NSGA-II 接近，
+        但其对预测准确性的依赖使其在 FDA4 上表现受限。</p>
     </div>
   </section>
 
   <section id="recovery" class="doc-block">
     <h2>7. 恢复曲线（τ<sub>t</sub> = 25）</h2>
     <p>
-      恢复曲线刻画环境变化后种群 IGD 随代数下降的过程。LDMT 通过迁移映射将历史环境的
-      最优结构投射到新环境，使变化后首代 IGD 显著低于从零重启动的 DNSGA-II，并在
-      前 5 代内快速收敛。
+      恢复曲线刻画环境变化后种群 IGD 随代数下降的过程。LDT-NSGA-II 通过轻量级分布迁移将历史环境的
+      最优结构投射到新环境，使变化后首代 IGD 明显低于从零重启动的 DNSGA-II-inspired，并在
+      前若干代内快速收敛。
     </p>
     <div class="doc-chart" data-chart="recovery" data-data="data-recovery-fda1">
       <div class="chart-canvas" style="height:320px"></div>
@@ -1599,32 +1646,37 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </div>
     </div>
     <div class="chart-analysis">
-      <p><strong>FDA1（图 2-a）：</strong>环境变化后首代，LDMT 的 IGD 为 <span class="key-stat">0.0128</span>，
-        与 AR-NSGA-II（0.0121）几乎持平，远低于 DNSGA-II（0.0347）与 GMM-Transfer（0.0348）；
-        至第 24 代，四者收敛至 0.0054–0.0078 区间，LDMT（0.0055）与 AR 基本并列最优。
-        这说明在 PS 旋转、PF 固定的 FDA1 上，迁移类算法的主要优势体现在变化后的<strong>快速启动</strong>阶段。</p>
-      <p><strong>FDA3（图 2-b）：</strong>LDMT 首代 IGD 为 <span class="key-stat">0.0123</span>，
-        为四者最低，第 5 代即降至 0.0081；而 DNSGA-II 首代高达 0.0368，第 5 代仍有 0.0256。
-        LDMT 在前 5 代内的恢复速度约为 DNSGA-II 的 2 倍，体现了流形迁移对 PF 形状变化的良好适应性。</p>
-      <p><strong>FDA4（图 2-c）：</strong>在多模态难题上，LDMT 的领先贯穿整个恢复过程。
-        其首代 IGD 为 <span class="key-stat">0.1287</span>，比次优的 GMM-Transfer（0.1475）低 13%，
-        比 DNSGA-II（0.1576）低 18%；至第 24 代，LDMT（0.0788）仍保持最低。
+      <p><strong>FDA1（图 2-a）：</strong>环境变化后首代，PPS 的 IGD 最低（0.0104），
+        AR1-Predictive 次之（0.0129）；LDT-NSGA-II 为 <span class="key-stat">0.0238</span>，
+        明显低于 NSGA-II (static)（0.0338）、DNSGA-II-inspired（0.0347）与 GMM-inspired（0.0363）。
+        至第 24 代各算法收敛至 0.0051–0.0078 区间，PPS（0.0051）与 AR1-Predictive（0.0054）最低，
+        LDT-NSGA-II 为 0.0064。这说明在 PS 旋转、PF 固定的 FDA1 上，迁移/预测类算法的主要优势
+        体现在变化后的<strong>快速启动</strong>阶段。</p>
+      <p><strong>FDA3（图 2-b）：</strong>LDT-NSGA-II 首代 IGD 为 <span class="key-stat">0.0310</span>，
+        低于 NSGA-II (static)（0.0355）与 DNSGA-II-inspired（0.0368）；PPS 最低（0.0129），
+        AR1-Predictive 次之（0.0151）。至第 5 代 LDT-NSGA-II 降至 0.0165，而 DNSGA-II-inspired 仍有 0.0256。
+        LDT-NSGA-II 在早期的恢复速度明显快于无迁移基线，体现了分布迁移对 PF 形状变化的良好适应性。</p>
+      <p><strong>FDA4（图 2-c）：</strong>在多模态难题上，PPS 全程领先（首代 0.1074、第 24 代 0.0766）；
+        LDT-NSGA-II 次之（首代 <span class="key-stat">0.1304</span>、第 24 代 0.0791），
+        明显优于 AR1-Predictive（0.1721 / 0.0882）、GMM-inspired（0.1739 / 0.0908）、
+        NSGA-II (static)（0.1682 / 0.0917）与 DNSGA-II-inspired（0.1750 / 0.0925）。
         这是因为 FDA4 的 PS/PF 联动变化使纯预测（AR）与采样（GMM）容易失效，
-        而 LDMT 的低维流形映射能更准确地捕捉结构变化。</p>
-      <p><strong>综合结论：</strong>恢复曲线证实，迁移策略（LDMT / AR）相比重启动（DNSGA-II）与高斯采样（GMM），
-        能将环境切换后的初始 IGD 降低 60%–65%；其中 LDMT 在 FDA3/FDA4 上首代 IGD 均为最低，
-        且全程保持领先，证明其迁移质量优于 AR 的线性预测与 GMM 的分布采样。
-        就 postMIGD（首代 IGD）整体均值而言，LDMT 为 <span class="key-stat">0.0548</span>，
-        比 AR-NSGA-II（0.0675）低 19%，比 GMM-Transfer（0.0797）低 31%。</p>
+        而分布迁移能更准确地捕捉结构变化。</p>
+      <p><strong>综合结论：</strong>恢复曲线证实，迁移类策略（LDT-NSGA-II / PPS / AR1-Predictive）相比重启动
+        （DNSGA-II-inspired）与分布采样（GMM-inspired），能把环境切换后的初始 IGD 大幅降低——以 FDA4 为例，
+        LDT-NSGA-II 首代 IGD（0.1304）比 DNSGA-II-inspired（0.1750）低约 25%，比 GMM-inspired（0.1739）低约 25%。
+        就 postMIGD（首代 IGD）整体均值而言，PPS 最低（0.0460），LDT-NSGA-II 次之
+        （<span class="key-stat">0.0637</span>），优于 AR1-Predictive（0.0680）、DNSGA-II-inspired（0.0817）、
+        GMM-inspired（0.0834）与 NSGA-II (static)（0.0866）。</p>
     </div>
   </section>
 
   <section id="efficiency" class="doc-block">
     <h2>8. 迁移效率</h2>
     <p>
-      迁移耗时直接决定算法在快变环境中的响应能力。GMM-Transfer 需对历史种群进行
-      高斯混合建模与采样，单环境迁移开销约 0.23–0.27 秒；LDMT 使用低维流形线性映射，
-      迁移开销降至 0.02–0.04 秒，与 AR-NSGA-II 相当。
+      迁移耗时直接决定算法在快变环境中的响应能力。GMM-inspired 需对历史种群进行
+      高斯混合建模与采样，单环境迁移开销约 0.21–0.23 秒；LDT-NSGA-II 采用轻量级分布迁移，
+      迁移开销降至约 0.022–0.025 秒，与 AR1-Predictive（约 0.018–0.019 秒）处于同一量级。
     </p>
     <div class="doc-chart" data-chart="mig-time" data-data="data-mig-time">
       <div class="chart-canvas" style="height:340px"></div>
@@ -1633,35 +1685,36 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </div>
     </div>
     <div class="chart-analysis">
-      <p><strong>量级对比：</strong>图 3 清晰呈现了四阶耗时梯队。DNSGA-II 不执行迁移，
-        开销接近 0（约 0.001 秒，仅为检测与重置）；LDMT 与 AR-NSGA-II 处于同一量级
-        （0.02–0.04 秒）；GMM-Transfer 则高达 0.23–0.27 秒，是 LDMT 的 6.8–11.2 倍。</p>
-      <p><strong>分问题提速：</strong>在 FDA1 上 GMM 耗时 0.254 秒、LDMT 0.028 秒，
-        提速 <span class="key-stat">9.1×</span>；FDA3 上 GMM 0.235 秒、LDMT 0.021 秒，
-        提速 <span class="key-stat">11.2×</span>；FDA4 上 GMM 0.270 秒、LDMT 0.040 秒，
-        提速 <span class="key-stat">6.8×</span>。三问题平均提速约 <span class="key-stat">9.0×</span>。
-        FDA4 提速略低，因高维空间下 LDMT 的流形构建开销有所增加。</p>
-      <p><strong>机制归因：</strong>GMM-Transfer 需对历史种群进行 EM 迭代拟合高斯混合模型并反向采样，
-        复杂度随组件数 K 与种群规模超线性增长；LDMT 仅在低维隐空间构建线性映射矩阵，
-        计算量与维度成正比，因此迁移开销降低一个数量级。</p>
+      <p><strong>量级对比：</strong>图 3 呈现了明显的耗时梯队。NSGA-II (static)、DNSGA-II-inspired 不执行迁移，
+        开销接近 0（分别约 0.0004 与 0.0011 秒）；AR1-Predictive（0.018–0.019 秒）、PPS（0.017–0.021 秒）
+        与 LDT-NSGA-II（0.022–0.025 秒）处于同一量级；GMM-inspired 则高达 0.21–0.23 秒，
+        约为 LDT-NSGA-II 的 9–10 倍。</p>
+      <p><strong>分问题提速：</strong>在 FDA1 上 GMM-inspired 耗时 0.227 秒、LDT-NSGA-II 0.025 秒，
+        提速 <span class="key-stat">9.0×</span>；FDA3 上 GMM 0.214 秒、LDT 0.022 秒，
+        提速 <span class="key-stat">9.6×</span>；FDA4 上 GMM 0.217 秒、LDT 0.022 秒，
+        提速 <span class="key-stat">9.8×</span>。三问题平均提速约 <span class="key-stat">9.5×</span>。</p>
+      <p><strong>机制归因：</strong>GMM-inspired 需对历史种群进行 EM 迭代拟合高斯混合模型并反向采样，
+        复杂度随组件数 K 与种群规模增长；LDT-NSGA-II 仅在低维特征空间构建分布迁移映射，
+        计算量与维度成正比，因此迁移开销降低约一个数量级。</p>
       <p><strong>工程意义：</strong>在 τ<sub>t</sub>=10 的快变场景下，单环境仅有 10 代响应窗口，
-        GMM 的迁移耗时（~0.25 秒）已接近单代进化开销，可能挤占有效进化时间；
-        LDMT 的低迁移开销（~0.03 秒）使其在快变环境下仍能保证充足的进化代数，
-        这也是其 MIGD 随 τ 下降增幅最小的重要原因。</p>
+        GMM-inspired 的迁移耗时（~0.22 秒）已接近甚至超过单代进化开销，可能挤占有效进化时间；
+        LDT-NSGA-II 的迁移开销（~0.023 秒）使其在快变环境下仍能保证充足的进化代数，
+        这也是其 MIGD 随 τ 下降增幅相对较小的原因之一。</p>
     </div>
     <div class="doc-callout is-warn">
-      <strong>效率-质量权衡：</strong>DNSGA-II 虽迁移开销最低（不做迁移），但其 MIGD
-      在所有问题上均劣于 LDMT；LDMT 在保持近 AR-NSGA-II 级别的迁移效率同时，取得
-      最优收敛质量，实现了效率与精度的最佳平衡。
+      <strong>效率-质量权衡：</strong>DNSGA-II-inspired 虽迁移开销最低（不做迁移），但其 MIGD
+      在所有问题上均劣于 LDT-NSGA-II；LDT-NSGA-II 在保持与 AR1-Predictive 同一量级的迁移效率的同时，
+      平均 MIGD 优于除 PPS 外的全部基线，实现了效率与精度的良好平衡。
     </div>
   </section>
 
   <section id="ablation" class="doc-block">
     <h2>9. 消融实验</h2>
     <p>
-      为验证 LDMT 中两个核心组件的贡献，构造两个变体：
-      <strong>移除特征简化</strong>（直接在原高维空间做映射）与
-      <strong>移除迁移映射</strong>（仅保留预测响应）。实验在 FDA1/3/4（τ=25）上进行。
+      为验证 LDT-NSGA-II 中各组件的贡献，构造三个消融变体：
+      <strong>无趋势模块</strong>（A：移除趋势外推）、
+      <strong>无分布迁移</strong>（B：移除分布迁移映射）与
+      <strong>κ=0</strong>（C：迁移保留比例设为 0）。实验在 FDA1/3/4（τ=25）上进行。
     </p>
     <div class="doc-chart" data-chart="ablation" data-data="data-ablation">
       <div class="chart-canvas" style="height:340px"></div>
@@ -1670,29 +1723,30 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </div>
     </div>
     <div class="chart-analysis">
-      <p><strong>移除迁移映射（橙色柱）：</strong>MIGD 在三个问题上均明显上升。
-        FDA1 从 0.00657 升至 <span class="key-stat">0.00852</span>（+29.7%），
-        FDA3 从 0.00673 升至 <span class="key-stat">0.00909</span>（+35.1%），
-        FDA4 从 0.08658 升至 <span class="key-stat">0.09162</span>（+5.8%）。
-        这表明流形迁移映射是 LDMT 收敛精度的核心来源——一旦移除，
+      <p><strong>无分布迁移（B，蓝色柱）：</strong>MIGD 在三个问题上均明显上升。
+        FDA1 从 0.00741 升至 <span class="key-stat">0.00965</span>（+30.2%），
+        FDA3 从 0.00794 升至 <span class="key-stat">0.01027</span>（+29.3%），
+        FDA4 从 0.09039 升至 0.10223（+13.1%）。
+        这表明分布迁移是 LDT-NSGA-II 收敛精度的核心来源——一旦移除，
         算法退化为基于预测响应的重启动策略，难以利用历史环境的结构信息。</p>
-      <p><strong>移除特征简化（灰色柱）：</strong>MIGD 几乎不变甚至略有下降
-        （FDA1 0.00657→0.00644，FDA3 0.00673→0.00668，FDA4 0.08658→0.08405），
-        说明在原高维空间直接构建迁移映射也能达到相当精度。
-        但代价是迁移耗时大幅增加：FDA1 从 0.0138 秒增至 <span class="key-stat">0.1937 秒</span>（14×），
-        FDA3 从 0.0172 增至 0.1384 秒（8×），FDA4 从 0.0311 增至 0.1544 秒（5×）。
-        这证实特征简化是 LDMT 效率的关键保障。</p>
-      <p><strong>组件协同：</strong>完整 LDMT（红色柱）在精度上与"移除特征简化"变体持平，
-        在效率上与"移除迁移映射"变体持平，实现了二者的最佳组合。
-        换言之，<strong>流形迁移映射决定精度上限，特征简化决定效率下限</strong>，
-        两者缺一不可。</p>
-      <p><strong>问题差异：</strong>FDA3 受迁移映射移除的影响最大（+35%），
-        因其 PF 形状随时间连续变化，最依赖历史结构的迁移；FDA4 影响最小（+6%），
+      <p><strong>无趋势模块（A，橙色柱）：</strong>MIGD 同样明显上升
+        （FDA1 0.00741→0.00884，+19.3%；FDA3 0.00794→0.00943，+18.8%；FDA4 0.09039→0.10106，+11.8%），
+        说明趋势外推对精度亦有显著贡献。</p>
+      <p><strong>κ=0（C，灰色柱）：</strong>MIGD 与完整模型几乎持平
+        （FDA1 +0.7%、FDA3 −0.8%、FDA4 −0.2%），
+        说明迁移保留比例 κ 的单独影响很小。</p>
+      <p><strong>组件协同：</strong>完整 LDT-NSGA-II（红色柱）在精度上优于三个消融变体；
+        其中分布迁移（B）与趋势模块（A）的移除均带来 12%–30% 的 MIGD 上升，
+        而 κ（C）的影响在 ±1% 以内。换言之，<strong>分布迁移与趋势模块共同决定精度上限</strong>，
+        迁移保留比例 κ 的敏感性较低。</p>
+      <p><strong>问题差异：</strong>FDA1 与 FDA3 受分布迁移移除的影响最大（+29%–30%），
+        因其 PF 随时间变化/连续变化，最依赖历史结构的迁移；FDA4 影响最小（+13%），
         因多模态问题本身搜索难度高，迁移增益相对有限。</p>
     </div>
     <div class="doc-callout is-tip">
-      <strong>组件贡献小结：</strong>流形迁移映射是精度核心（移除后 MIGD 上升 6%–35%），
-      特征简化是效率保障（移除后迁移耗时增加 5–14 倍）。完整 LDMT 同时实现最优精度与近最优效率。
+      <strong>组件贡献小结：</strong>分布迁移（B）与趋势模块（A）是精度核心
+      （移除后 MIGD 分别上升约 13%–30% 与 12%–19%），迁移保留比例 κ（C）影响最小（±1% 以内）。
+      完整 LDT-NSGA-II 在三个消融变体中精度最优。
     </div>
   </section>
 
@@ -1704,24 +1758,24 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     <div class="doc-chart" data-chart="sensitivity" data-data="data-sensitivity">
       <div class="chart-canvas" style="height:360px"></div>
       <div class="chart-caption">
-        图 5  LDMT-NSGA-II 在 FDA3（τ=25）上的参数敏感性。实线为 MIGD 随种群规模 N 的变化（n<sub>t</sub>=20），
+        图 5  LDT-NSGA-II 在 FDA3（τ=25）上的参数敏感性。实线为 MIGD 随种群规模 N 的变化（n<sub>t</sub>=20），
         虚线为 MIGD 随每环境代数 n<sub>t</sub> 的变化（N=100）。
       </div>
     </div>
     <div class="chart-analysis">
       <p><strong>种群规模 N 的影响（实线）：</strong>N 从 50 增至 100 时，MIGD 从
-        <span class="key-stat">0.0138</span> 降至 <span class="key-stat">0.0067</span>，降幅达 51%，
-        改善极为显著；N 从 100 进一步增至 150 时，MIGD 降至 0.0045，降幅收窄至 33%。
-        这表明种群规模对 LDMT 性能有正向作用，但存在边际递减——N=100 已是性价比拐点。</p>
+        <span class="key-stat">0.0529</span> 降至 <span class="key-stat">0.0352</span>，降幅约 34%；
+        N 从 100 进一步增至 200 时，MIGD 降至 0.0239，降幅约 32%。
+        种群规模对性能有正向作用，尚未出现明显的边际递减。</p>
       <p><strong>每环境代数 n<sub>t</sub> 的影响（虚线）：</strong>n<sub>t</sub> 从 10 增至 20 时，
-        MIGD 从 0.0073 降至 0.0067（降幅 8%）；从 20 增至 40 时，仅降至 0.0064（降幅 4%）。
-        说明 n<sub>t</sub>=20 已足以让迁移后的种群完成充分收敛，继续增加代数收益有限。</p>
-      <p><strong>参数交互：</strong>对比 N=50/n<sub>t</sub>=20（MIGD=0.0138）与 N=100/n<sub>t</sub>=10（MIGD=0.0073），
-        可见<strong>种群规模的影响远大于每环境代数</strong>。这是因为 LDMT 的迁移质量依赖于
-        足够大的种群来准确估计低维流形，而每环境代数主要影响收敛精度的微调。</p>
-      <p><strong>推荐配置：</strong>综合精度与计算成本，N=100、n<sub>t</sub>=20 是最优平衡点——
-        相比 N=150 仅损失约 33% 的 MIGD 改善，但种群评估量减少 33%；相比 n<sub>t</sub>=40
-        损失 4% 的 MIGD 改善，但进化代数减半。该配置也被主对比实验采用。</p>
+        MIGD 从 0.0376 降至 0.0352（降幅约 6%）；从 20 增至 40 时降至 0.0331（降幅约 6%）。
+        说明 n<sub>t</sub>=20 已足以让迁移后的种群完成较充分的收敛，继续增加代数收益有限。</p>
+      <p><strong>参数交互：</strong>对比 N=50/n<sub>t</sub>=20（MIGD=0.0529）与 N=100/n<sub>t</sub>=10（MIGD=0.0376），
+        可见<strong>种群规模的影响大于每环境代数</strong>。这是因为 LDT-NSGA-II 的迁移质量依赖于
+        足够大的种群来估计分布结构，而每环境代数主要影响收敛精度的微调。</p>
+      <p><strong>推荐配置：</strong>综合精度与计算成本，N=100、n<sub>t</sub>=20 是较优平衡点——
+        相比 N=200 其 MIGD 高约 47%，但种群评估量减半；相比 n<sub>t</sub>=40
+        损失约 6% 的 MIGD 改善，但每环境进化代数减半。该配置也被主对比实验采用。</p>
     </div>
     <table class="doc-table">
       <thead><tr><th>N</th><th>n<sub>t</sub></th><th>MIGD ↓</th><th>MHV ↑</th></tr></thead>
@@ -1734,8 +1788,8 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   <section id="boxplot" class="doc-block">
     <h2>11. 分布与稳健性</h2>
     <p>
-      箱线图展示 30 次独立运行的 MIGD 分布，反映算法的稳健性。LDMT 的箱体整体更低且更窄，
-      说明其不仅均值更优，运行间波动也更小。
+      箱线图展示 30 次独立运行的 MIGD 分布，反映算法的稳健性。PPS 的箱体整体最低；
+      LDT-NSGA-II 的箱体中位数在多数组合中位列第二，且四分位距较小，运行间波动可控。
     </p>
     <div class="doc-chart" data-chart="boxplot" data-data="data-boxplot-fda1">
       <div class="chart-canvas" style="height:300px"></div>
@@ -1752,23 +1806,25 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </div>
     </div>
     <div class="chart-analysis">
-      <p><strong>FDA1（图 6-a）：</strong>在 τ=10 与 τ=25 下，LDMT 的箱体位置最低
-        （中位数 0.0146 / 0.0065），且四分位距（IQR）与 DNSGA-II 相当、小于 AR-NSGA-II，
-        说明 LDMT 在保持最低中位数的同时，运行间波动可控。τ=50 时四者箱体高度接近，
-        因变化缓慢使所有算法均有充足时间收敛，差异缩小。</p>
-      <p><strong>FDA3（图 6-b）：</strong>LDMT 在全部三个 τ 下中位数均为最低
-        （τ=10: 0.0140，τ=25: 0.0066，τ=50: 0.0051），且在 τ=25 与 τ=50 下 IQR 最小
-        （0.00033 / 0.00015），表明 LDMT 在 FDA3 上同时具备最优精度与最优稳健性。
-        AR-NSGA-II 在 τ=10 时 IQR 偏大（0.00281），反映其预测机制在快变下稳定性不足。</p>
+      <p><strong>FDA1（图 6-a）：</strong>在 τ=10 与 τ=25 下，PPS 的箱体位置最低
+        （中位数 0.0121 / 0.0061），LDT-NSGA-II 次之（0.0158 / 0.0073），
+        其四分位距（IQR）与 DNSGA-II-inspired 相当（0.0015 / 0.0004）、
+        小于 AR1-Predictive（τ=10 时 0.0021），说明 LDT-NSGA-II 在保持较低中位数的同时，
+        运行间波动可控。τ=50 时各算法箱体高度接近，因变化缓慢使所有算法均有充足时间收敛，差异缩小。</p>
+      <p><strong>FDA3（图 6-b）：</strong>PPS 在全部三个 τ 下中位数均最低
+        （τ=10: 0.0130，τ=25: 0.0065，τ=50: 0.0051），LDT-NSGA-II 次之
+        （0.0177 / 0.0078 / 0.0054）。
+        AR1-Predictive 在 τ=10 时 IQR 偏大（0.0033），反映其预测机制在快变下稳定性不足。</p>
       <p><strong>FDA4（图 6-c）：</strong>多模态问题上算法间差异最显著。
-        τ=10 时，AR-NSGA-II 的 IQR 高达 <span class="key-stat">0.0218</span>，
-        是 LDMT（0.0084）的 2.6 倍，且中位数（0.1916）远高于 LDMT（0.1307）；
-        这说明纯预测策略在 PS/PF 联动快变时极易失效，产生大量离群运行。
-        LDMT 在 τ=10 与 τ=25 下中位数均最低，且箱体更窄，稳健性优势明显。</p>
-      <p><strong>综合稳健性结论：</strong>箱线图表明 LDMT-NSGA-II 不仅均值更优，
-        其 30 次运行的分布也更集中——尤其在 FDA4 这类高难度问题上，
-        LDMT 成功避免了 AR-NSGA-II 出现的大波动与离群值。
-        这验证了低维流形迁移相比线性预测具有更强的结构泛化能力，
+        τ=10 时，NSGA-II (static) 的 IQR 最高（<span class="key-stat">0.0265</span>），
+        中位数（0.2117）也最高；AR1-Predictive 的中位数（0.1494）明显高于
+        PPS（0.1165）与 LDT-NSGA-II（0.1235）。
+        LDT-NSGA-II 在 τ=10 与 τ=25 下 IQR 均最小（0.0067 / 0.0047），中位数位列第二，
+        说明其在 PS/PF 联动快变时既保持较优精度又具备最集中的分布。</p>
+      <p><strong>综合稳健性结论：</strong>箱线图表明 LDT-NSGA-II 不仅均值位居前列，
+        其 30 次运行的分布也最为集中——尤其在 FDA4 这类高难度问题上，
+        LDT-NSGA-II 的 IQR 最小，成功避免了大波动与离群值。
+        这体现了轻量级分布迁移相比线性预测具有更强的结构泛化能力，
         对随机初始化与环境变化不敏感。</p>
     </div>
   </section>
@@ -1776,18 +1832,22 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   <section id="conclusion" class="doc-block">
     <h2>12. 结论</h2>
     <div class="doc-callout">
-      <p><strong>1. 收敛质量：</strong>LDMT-NSGA-II 在 9 个主对比组合中取得 6/9 个 MIGD 最优与
-      6/9 个 MHV 最优，整体平均 MIGD（0.0378）为四算法最低，全面优于三个基线。</p>
-      <p><strong>2. 响应速度：</strong>迁移阶段相对 GMM-Transfer 平均提速 9.5×，
-      在快变环境（τ=10）下优势尤为明显。</p>
-      <p><strong>3. 恢复能力：</strong>环境变化后首代 IGD（postMIGD）显著低于 DNSGA-II，
-      5 代内即可收敛至近最优水平。</p>
-      <p><strong>4. 组件贡献：</strong>消融实验证实流形迁移映射是性能核心，特征简化是效率保障。</p>
-      <p><strong>5. 参数稳健：</strong>N ≥ 100、n<sub>t</sub> ≥ 20 时算法性能稳定，对参数不敏感。</p>
+      <p><strong>1. 收敛质量：</strong>在 9 个主对比组合中，LDT-NSGA-II 未取得 MIGD/MHV 最优
+      （0/9，最优值全部由 PPS 取得），但其平均 MIGD（0.0386）在六个算法中位列第二，
+      优于除 PPS 外的全部基线。</p>
+      <p><strong>2. 响应速度：</strong>迁移阶段相对 GMM-inspired 平均提速约 9.5×
+      （FDA1 9.0×、FDA3 9.6×、FDA4 9.8×），在快变环境（τ=10）下优势尤为明显。</p>
+      <p><strong>3. 恢复能力：</strong>环境变化后首代 IGD（postMIGD 均值 0.0637）明显低于
+      DNSGA-II-inspired（0.0817）、GMM-inspired（0.0834）与 NSGA-II (static)（0.0866），
+      可在前若干代内快速收敛。</p>
+      <p><strong>4. 组件贡献：</strong>消融实验证实分布迁移（B）与趋势模块（A）是精度核心
+      （移除后 MIGD 上升约 12%–30%），迁移保留比例 κ（C）影响最小。</p>
+      <p><strong>5. 参数稳健：</strong>N=100、n<sub>t</sub>=20 是精度与计算成本的较优折中，
+      其中每环境代数 n<sub>t</sub> 的影响相对温和，种群规模 N 的影响更显著。</p>
     </div>
     <p>
-      综上，LDMT-NSGA-II 在收敛质量、响应速度与稳健性三方面均达到当前动态多目标进化算法的
-      先进水平，尤其适用于变化频繁且需快速响应的动态优化场景。
+      综上，LDT-NSGA-II 在收敛质量、响应速度与稳健性三方面均具有较强竞争力，
+      尤其适用于变化频繁且需快速响应的动态优化场景。
     </p>
   </section>
 
@@ -2274,31 +2334,145 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       }]
     };
   }
+  function optionFor(chartKind, rows) {
+    if (chartKind === "migd-bar") return migdBarOption(rows);
+    if (chartKind === "mig-time") return migTimeOption(rows);
+    if (chartKind === "ablation") return ablationOption(rows);
+    if (chartKind === "recovery") return recoveryOption(rows);
+    if (chartKind === "sensitivity") return sensitivityOption(rows);
+    if (chartKind === "boxplot") return boxplotOption(rows);
+    return {};
+  }
+  // 首帧静态绘制（关闭动画）：避免图表在视口外就把动画跑完
+  function staticOption(opt) {
+    var o = JSON.parse(JSON.stringify(opt));
+    o.animation = false;
+    (o.series || []).forEach(function (s) { s.animation = false; });
+    return o;
+  }
+  function animOf(chart) {
+    try { return chart.getZr().animation; } catch (e) { return null; }
+  }
+  function renderChart(c) {
+    c.started = true;
+    c.chart.clear();
+    c.chart.setOption(c.option, true);
+  }
+  function playChart(c) {
+    if (!c.started) { renderChart(c); return; }
+    var a = animOf(c.chart);
+    if (a && a.resume) a.resume();
+  }
+  function pauseChart(c) {
+    if (!c.started) return;
+    var a = animOf(c.chart);
+    if (a && a.pause) a.pause();
+  }
+  function replayChart(c) {
+    var a = animOf(c.chart);
+    if (a && a.resume) a.resume();
+    renderChart(c);
+  }
+
+  var chartList = [];
+  var visibleBlocks = [];
+
+  /* ========== 图表动画控制条 ========== */
+  var reduceMotion = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function targetCharts() {
+    var list = chartList.filter(function (c) {
+      return visibleBlocks.indexOf(c.block) !== -1;
+    });
+    return list.length ? list : chartList;
+  }
+
+  function initChartControls() {
+    var bar = document.getElementById("chartCtl");
+    if (!bar || !chartList.length) return;
+    var btnPlay = document.getElementById("chartPlay");
+    var btnPause = document.getElementById("chartPause");
+    var btnReplay = document.getElementById("chartReplay");
+
+    function refresh() {
+      bar.classList.toggle("show", visibleBlocks.length > 0);
+      var running = chartList.some(function (c) {
+        return visibleBlocks.indexOf(c.block) !== -1 && c.started;
+      });
+      if (btnPlay) btnPlay.classList.toggle("on", running);
+    }
+    if (btnPlay) btnPlay.addEventListener("click", function () {
+      targetCharts().forEach(playChart); refresh();
+    });
+    if (btnPause) btnPause.addEventListener("click", function () {
+      targetCharts().forEach(pauseChart); refresh();
+    });
+    if (btnReplay) btnReplay.addEventListener("click", function () {
+      targetCharts().forEach(replayChart); refresh();
+    });
+
+    // 基于窗口滚动的可见性检测（与本页既有滚动动画同一套 getBoundingClientRect 方案，最稳妥）
+    var inView = [];
+    function scan() {
+      var vh = window.innerHeight || 0;
+      // 无有效视口（无头 / 异常环境）：全部视为可见，避免控制条与动画失效
+      if (!vh || vh < 50) {
+        chartList.forEach(function (c) {
+          if (!c.started && !reduceMotion) renderChart(c);
+        });
+        visibleBlocks = chartList.map(function (c) { return c.block; });
+        inView = visibleBlocks.slice();
+        refresh();
+        return;
+      }
+      var nowIn = [];
+      chartList.forEach(function (c) {
+        var r = c.block.getBoundingClientRect();
+        var vis = r.height > 0 && r.bottom > vh * 0.15 && r.top < vh * 0.85;
+        if (vis) {
+          nowIn.push(c.block);
+          if (inView.indexOf(c.block) === -1) {           // 新进入视口
+            if (!c.started) { if (!reduceMotion) renderChart(c); }  // 首次进入自动播放
+            else playChart(c);                            // 再次进入则续播
+          }
+        } else if (inView.indexOf(c.block) !== -1) {      // 离开视口
+          pauseChart(c);
+        }
+      });
+      inView = nowIn;
+      visibleBlocks = nowIn;
+      refresh();
+    }
+    var ticking = false;
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(function () { scan(); ticking = false; });
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    scan();
+  }
+
   function setupCharts() {
     if (!window.echarts) return;
     var instances = [];
     document.querySelectorAll("[data-chart]").forEach(function (block) {
       var canvas = block.querySelector(".chart-canvas");
-      var dataId = block.getAttribute("data-data");
+      var rows = readJson(block.getAttribute("data-data"));
       var chartKind = block.getAttribute("data-chart");
-      var rows = readJson(dataId);
       if (!canvas || !rows) return;
       var chart = echarts.init(canvas, null, { renderer: "canvas" });
-      function optionFor() {
-        if (chartKind === "migd-bar") return migdBarOption(rows);
-        if (chartKind === "mig-time") return migTimeOption(rows);
-        if (chartKind === "ablation") return ablationOption(rows);
-        if (chartKind === "recovery") return recoveryOption(rows);
-        if (chartKind === "sensitivity") return sensitivityOption(rows);
-        if (chartKind === "boxplot") return boxplotOption(rows);
-        return {};
-      }
-      chart.setOption(optionFor(), true);
+      var opt = optionFor(chartKind, rows);
+      chart.setOption(staticOption(opt), true);   // 先以最终形态静态呈现
+      chartList.push({ chart: chart, block: block, option: opt, started: false });
       instances.push(chart);
     });
     window.addEventListener("resize", function () {
       instances.forEach(function (chart) { chart.resize(); });
     });
+    initChartControls();
   }
   document.addEventListener("DOMContentLoaded", setupCharts);
 })();

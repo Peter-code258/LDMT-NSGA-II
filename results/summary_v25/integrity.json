@@ -1,0 +1,14 @@
+{
+  "per_generation_rows": 1782000,
+  "distinct_runs": 3600,
+  "rows_per_run_unique": [
+    300,
+    600,
+    3600
+  ],
+  "files": 153,
+  "code_versions": [
+    "v2.2",
+    "v2.4"
+  ]
+}
