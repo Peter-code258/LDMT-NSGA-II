@@ -597,16 +597,35 @@ class LDTNSGA2Alpha1(LDTNSGA2):
 class LDTNSGA2Adaptive(LDTNSGA2):
     """LDT-NSGA-II with the ONLINE adaptive trend step (plan 3.1).
 
-    Motivation.  The v2.4/v2.5 experiments established two facts that no single
+    Motivation.  The v2.4/v2.5 experiments suggested two facts that no single
     fixed coefficient can satisfy at once:
 
     * on problems whose Pareto set TRANSLATES regularly (FDA1/FDA3/FDA4,
       dMOP2A, dMOP3A), the full step ``alpha = 1.0`` wins on 11 of 12
       configurations -- the default half step systematically under-extrapolates;
     * on the authoritative Type III problem dMOP1A, whose Pareto set is STATIC
-      and only the front rotates, the half step beats the full step by 127%
-      (0.0251 vs 0.0570), because the centre increment consists almost entirely
-      of sampling noise and a full step amplifies it into a systematic offset.
+      and only the front rotates, the half step was reported to beat the full
+      step by 127% (0.0251 vs 0.0570).
+
+    WARNING -- that second fact has been RETRACTED (v3.1, issue K34).  The
+    dMOP1A cell supporting it is a stale artefact: recomputing it with the same
+    driver on the same 30 seeds gives 0.02507, not 0.05697.  An audit of 13
+    (problem, arm) combinations reproduced 12 bit-for-bit and failed only that
+    one, and an A/B run of the frozen revision against the current tree gave
+    identical output, so it is unrelated to any code change.  Recomputing,
+    alpha=0.5 gives 0.02510 and alpha=1.0 gives 0.02507 on dMOP1A -- a 0.1%
+    difference that is not statistically significant.  See
+    ``results/summary_v31/ADAPTIVE_ALPHA_FINDINGS.md``.
+
+    This class is therefore an EXPERIMENTAL variant, not a recommendation.
+    Measured behaviour (v3.1, 3120 runs): statistically indistinguishable from a
+    fixed full step in ALL 15 configurations, while costing 53% more migration
+    time, so it is NOT enabled by default.  The mechanism does work as designed
+    -- translating sets push alpha_k to 1.0 and static dMOP1A settles at the 0.5
+    floor -- it simply does not convert into performance, and it raises false
+    positives while a static Pareto set is still being approached.
+
+    With that caveat, the online rule is:
 
     This class therefore chooses ``alpha_k`` ONLINE, per environment change:
 
