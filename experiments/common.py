@@ -24,7 +24,8 @@ import numpy as np
 from problems import (FDA1, FDA3, FDA4, DMOP1, DMOP2, DMOP3,
                       DMOP1A, DMOP2A, DMOP3A)
 from algorithms import (NSGA2Static, DNSGA2Response, ARNSGA2, GMMTransfer,
-                         LDTNSGA2, LDTNSGA2Alpha1, PPSNSGA2, DynamicDriver)
+                         LDTNSGA2, LDTNSGA2Alpha1, LDTNSGA2Adaptive, PPSNSGA2,
+                         DynamicDriver)
 
 PROBLEM_REGISTRY = {
     "FDA1": FDA1,
@@ -52,6 +53,9 @@ ALGORITHM_REGISTRY = {
     # (alpha=1.0). Deliberately NOT part of CANONICAL_ALGOS so that every
     # existing v2.4 artefact and default experiment list stays unchanged.
     "ldt_alpha1": LDTNSGA2Alpha1,
+    # v3.1 (plan 3.1): LDT with the ONLINE adaptive trend step.  Also NOT part
+    # of CANONICAL_ALGOS, so no existing artefact or default list changes.
+    "ldt_adaptive": LDTNSGA2Adaptive,
     # human-readable CLI names
     "NSGA-II": NSGA2Static,               # static baseline (no migrants)
     "DNSGA-II-inspired": DNSGA2Response,  # random-immigrant response
@@ -79,6 +83,8 @@ ALGO_DISPLAY = {
     "gmm_inspired": "GMM-inspired",
     "pps": "PPS",
     "ldt_nsga2": "LDT-NSGA-II",
+    "ldt_alpha1": "LDT-NSGA-II (alpha=1.0)",
+    "ldt_adaptive": "LDT-NSGA-II (adaptive alpha)",
 }
 
 # legacy CSV labels -> canonical ids (analyze-time normalization only)
@@ -102,6 +108,9 @@ ROW_FIELDS = [
     "n_t", "tau_t", "environment_index", "generation", "IGD", "HV",
     "generation_runtime_s", "migration_runtime_s", "n_evaluations",
     "code_version", "run_id", "lambda_k", "boundary_clip_ratio", "n_nd",
+    # v3.1 (plan 3.1): the trend step actually applied in this environment,
+    # so online adaptation is auditable per environment (parameter stability).
+    "alpha_k",
 ]
 
 
@@ -130,6 +139,10 @@ class RunConfig:
     alpha: float = None
     rho: float = None
     extra: dict = dataclasses.field(default_factory=dict)
+    # v3.1: constructor kwargs for the algorithm under test, so variant
+    # parameters (e.g. the adaptive rule's alpha_min/gamma) travel WITH the
+    # configuration instead of needing ad-hoc subclasses in the registry.
+    algo_kwargs: dict = dataclasses.field(default_factory=dict)
     # v2.4 (K6 fix): the unused ``evals_per_env`` field was removed; the real
     # evaluation budget per environment is N * tau_t (driver-controlled).
 
@@ -150,6 +163,9 @@ class RunConfig:
             "rho": self.rho,
         }
         d.update(self.extra or {})
+        if self.algo_kwargs:
+            d["algo_kwargs"] = {k: self.algo_kwargs[k]
+                                for k in sorted(self.algo_kwargs)}
         return d
 
     def config_hash(self):
@@ -257,7 +273,7 @@ def run_single(algorithm_name, problem_name, cfg, seed, return_meta=False):
     """Run one (algorithm, problem, seed); return rows (+ meta dict)."""
     t0 = time.perf_counter()
     problem = problem_factory(problem_name, tau_t=cfg.tau_t, n_t=cfg.n_t)
-    algo = build_algorithm(algorithm_name)
+    algo = build_algorithm(algorithm_name, **dict(cfg.algo_kwargs or {}))
     n_envs = max(1, cfg.n_gen // cfg.tau_t)
     run_id = make_run_id(cfg, algorithm_name, problem_name, seed)
     driver = DynamicDriver(algo, problem, problem_name, n_envs=n_envs,
@@ -434,7 +450,8 @@ class ExperimentRunner:
                                 code_version=cfg.code_version,
                                 experiment_group=cfg.experiment_group,
                                 alpha=cfg.alpha, rho=cfg.rho,
-                                extra=dict(cfg.extra or {}))
+                                extra=dict(cfg.extra or {}),
+                                algo_kwargs=dict(cfg.algo_kwargs or {}))
             try:
                 rows, meta = run_single(a, p, sub_cfg, s, return_meta=True)
             except Exception as e:

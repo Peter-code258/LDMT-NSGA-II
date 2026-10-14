@@ -1,0 +1,30 @@
+{
+  "calibration_rank": {
+    "adapt_a0.75_g1.0": 4.833333333333333,
+    "adapt_a0.50_g1.0": 4.0,
+    "adapt_a0.00_g0.5": 2.5,
+    "adapt_a0.00_g1.0": 3.3333333333333335,
+    "adapt_a0.50_g0.5": 4.833333333333333,
+    "adapt_a0.25_g1.0": 4.166666666666667,
+    "adapt_a0.25_g0.5": 4.333333333333333
+  },
+  "calibration_selected": "adapt_a0.00_g0.5",
+  "comparison_rank": {
+    "ldt_adaptive": 2.6,
+    "ldt_full": 1.9333333333333333,
+    "pps": 2.4,
+    "ldt_half": 3.6666666666666665,
+    "nsga2_static": 5.266666666666667,
+    "ldt_alpha0": 5.133333333333334
+  },
+  "vs_ldt_alpha0_significant": 13,
+  "vs_ldt_alpha0_n": 15,
+  "vs_ldt_full_significant": 0,
+  "vs_ldt_full_n": 15,
+  "vs_ldt_half_significant": 11,
+  "vs_ldt_half_n": 15,
+  "vs_nsga2_static_significant": 13,
+  "vs_nsga2_static_n": 15,
+  "vs_pps_significant": 5,
+  "vs_pps_n": 15
+}

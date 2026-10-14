@@ -133,6 +133,7 @@ class DynamicDriver:
                 lam_k = 1.0
                 bclip = 0.0
                 n_nd = 0
+                alpha_k = float(getattr(self.algorithm, "trend_alpha", 0.0))
             else:
                 result = self.algorithm.respond(prev_X, prev_F,
                                                  self.problem, k, rng)
@@ -141,11 +142,15 @@ class DynamicDriver:
                     lam_k = float(info.get("lambda_k", 1.0))
                     bclip = float(info.get("boundary_clip_ratio", 0.0))
                     n_nd = int(info.get("n_nd", 0))
+                    alpha_k = float(info.get("alpha_k",
+                                             getattr(self.algorithm,
+                                                     "trend_alpha", 0.0)))
                 else:
                     warm_X = result
                     lam_k = 1.0
                     bclip = 0.0
                     n_nd = 0
+                    alpha_k = float(getattr(self.algorithm, "trend_alpha", 0.0))
                 migration_runtime = time.perf_counter() - t0_mig
             # ---- run tau_t generations generation-by-generation ----
             algo = make_nsga2(
@@ -192,6 +197,7 @@ class DynamicDriver:
                     "lambda_k": lam_k,
                     "boundary_clip_ratio": bclip,
                     "n_nd": n_nd,
+                    "alpha_k": alpha_k,
                 })
             pop = algo.pop
             prev_X = pop.get("X")

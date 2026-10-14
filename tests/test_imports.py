@@ -80,4 +80,12 @@ def test_experiments_common_api():
     # legacy aliases all map INTO the canonical set
     for legacy, canon in LEGACY_ALGO_MAP.items():
         assert canon in CANONICAL_ALGOS
-    assert set(ALGO_DISPLAY) == set(CANONICAL_ALGOS)
+    # every canonical id has a display name.  Experimental variants
+    # (ldt_alpha1, ldt_adaptive) are also displayable but are deliberately NOT
+    # in CANONICAL_ALGOS, so the default experiment list is never widened.
+    assert set(CANONICAL_ALGOS) <= set(ALGO_DISPLAY)
+    assert "ldt_adaptive" in ALGO_DISPLAY
+    assert "ldt_alpha1" in ALGO_DISPLAY
+    for variant in ("ldt_adaptive", "ldt_alpha1"):
+        assert variant not in CANONICAL_ALGOS, \
+            f"{variant} must stay out of the default (canonical) list"

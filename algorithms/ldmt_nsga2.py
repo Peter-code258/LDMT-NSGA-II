@@ -40,7 +40,9 @@ class LDTNSGA2:
                  random_ratio=0.3, trend_alpha=0.5, n_probes=10,
                  adaptive_transfer=False, adaptive_beta=1.0,
                  multi_source=False, history_size=3,
-                 transfer_strategy=None):
+                 transfer_strategy=None, adaptive_alpha=False,
+                 alpha_min=0.5, alpha_max=1.0, gamma=1.0,
+                 noise_samples=200, conservative_first_change=True):
         self.transfer_ratio = float(transfer_ratio)
         self.retain_ratio = float(retain_ratio)
         self.random_ratio = float(random_ratio)
@@ -55,6 +57,28 @@ class LDTNSGA2:
         self.adaptive_beta = float(adaptive_beta)
         self.multi_source = bool(multi_source)
         self.history_size = int(history_size)
+        # ---- v3.1 (plan 3.1): online trend-step adaptation ----
+        # alpha_k = clip(alpha_min + (alpha_max-alpha_min) * s_k, lo, hi)
+        # where s_k is a dimensionless "movement dominates noise?" score built
+        # from the DECISION-space centre displacement and a bootstrap estimate
+        # of how uncertain that centre is.  Plan 3.1 requires this separation
+        # explicitly: the probe change magnitude D_k measures OBJECTIVE-space
+        # change and must not be used to infer decision-space displacement.
+        self.adaptive_alpha = bool(adaptive_alpha)
+        self.alpha_min = float(alpha_min)
+        self.alpha_max = float(alpha_max)
+        assert 0.0 <= self.alpha_min <= self.alpha_max <= 1.0, \
+            "require 0 <= alpha_min <= alpha_max <= 1"
+        self.gamma = float(gamma)
+        self.noise_samples = int(noise_samples)
+        # With no previous prediction residual (the very first change) there is
+        # no evidence that movement is sustained, so use the conservative end.
+        self.conservative_first_change = bool(conservative_first_change)
+        # diagnostics
+        self.alpha_series = []       # alpha_k actually used, per change
+        self.movement_series = []    # normalized movement signal
+        self.noise_series = []       # bootstrap noise floor
+        self.ratio_series = []       # movement / noise
         # normalized-space feature history [(mu, sigma), ...]
         self._feature_history = []
         self.transfer_strategy = transfer_strategy
@@ -64,6 +88,57 @@ class LDTNSGA2:
         self._sigma_prev = None  # normalized std of the last environment
         self._dk_sum = 0.0      # running sum of |D_k| for normalization
         self._dk_n = 0
+        self._n_changes = 0     # how many environment changes have occurred
+        self._alpha_used = float(trend_alpha)   # last alpha actually applied
+
+    # ---- v3.1 (plan 3.1): online trend-step adaptation ----
+    def centre_noise(self, nd_X_norm, rng):
+        """Bootstrap uncertainty of the centre estimate, per-dimension.
+
+        Plan 3.1 asks for "centre-estimate uncertainty or bootstrap stability"
+        as the NOISE signal.  We report the mean (over dimensions) of the
+        bootstrap standard deviation of each coordinate of the centre, in
+        normalized units, so it is directly comparable to a per-dimension
+        displacement.
+        """
+        n = nd_X_norm.shape[0]
+        if n < 2:
+            return float("inf")
+        B = max(2, self.noise_samples)
+        # B x n resample indices with replacement
+        idx = rng.integers(0, n, size=(B, n))
+        means = nd_X_norm[idx].mean(axis=1)          # B x D
+        sd = means.std(axis=0, ddof=1)               # D
+        return float(np.mean(sd))
+
+    def adaptive_step(self, mu_e, mu_prev, nd_X_norm, rng):
+        """Return ``(alpha_k, movement, noise, ratio)`` for this change.
+
+        movement  = ||mu_e - mu_prev||_2 / sqrt(D)     (per-dimension units)
+        noise     = mean_j bootstrap-SD(centre_j)      (per-dimension units)
+        ratio     = movement / max(noise, eps)
+        s_k       = clip((ratio - gamma) / (2*gamma), 0, 1)
+        alpha_k   = alpha_min + (alpha_max - alpha_min) * s_k
+
+        Interpretation, matching the plan's response table:
+          * ratio ~<= gamma  -> movement is within noise -> s_k = 0 -> alpha_min
+            (avoids amplifying sampling noise into a systematic offset)
+          * ratio >> gamma   -> sustained real movement -> s_k -> 1 -> alpha_max
+          * gamma is the registered "one noise unit" threshold; it is swept in
+            a separate calibration run and must NOT be chosen on the final
+            test set (plan 3.1).
+        """
+        D = mu_e.shape[0]
+        movement = float(np.linalg.norm(mu_e - mu_prev) / np.sqrt(D))
+        noise = self.centre_noise(nd_X_norm, rng)
+        if not np.isfinite(noise) or noise <= 0.0:
+            ratio = float("inf") if movement > 0 else 0.0
+        else:
+            ratio = movement / noise
+        span = max(2.0 * self.gamma, 1e-12)
+        s = float(np.clip((ratio - self.gamma) / span, 0.0, 1.0))
+        alpha = self.alpha_min + (self.alpha_max - self.alpha_min) * s
+        return alpha, movement, noise, ratio
 
     # ---- shared fixed probe (P1-1E) ----
     def _ensure_probe(self, prev_X, problem):
@@ -185,9 +260,31 @@ class LDTNSGA2:
         mu_eff, sigma_eff = self._fuse_features(mu_e, sigma_e)
 
         # 4. trend-centre prediction, clipped in [0,1]
+        #    v3.1 (plan 3.1): the step size is chosen ONLINE from decision-space
+        #    movement evidence.  NOTE the alpha used for the differential is
+        #    applied to mu_e (the raw centre), matching the recorded state
+        #    history _mu_prev; mu_eff only shifts the anchor.
+        if self.adaptive_alpha and self._mu_prev is not None:
+            if self.conservative_first_change and self._n_changes == 0:
+                # no residual history yet -> no evidence of sustained movement
+                alpha_k = self.alpha_min
+                movement, noise, ratio = float("nan"), float("nan"), float("nan")
+            else:
+                alpha_k, movement, noise, ratio = self.adaptive_step(
+                    mu_e, self._mu_prev,
+                    normalize(nd_X, xl, xu), rng)
+            self.alpha_series.append(alpha_k)
+            self.movement_series.append(movement)
+            self.noise_series.append(noise)
+            self.ratio_series.append(ratio)
+            self._alpha_used = alpha_k
+        else:
+            alpha_k = self.trend_alpha
+            self._alpha_used = self.trend_alpha
+
         if self._mu_prev is not None:
             mu_hat = np.clip(
-                mu_eff + self.trend_alpha * (mu_eff - self._mu_prev),
+                mu_eff + alpha_k * (mu_e - self._mu_prev),
                 0.0, 1.0)
         else:
             mu_hat = np.clip(mu_eff, 0.0, 1.0)
@@ -207,6 +304,7 @@ class LDTNSGA2:
         # 6. store current features (normalized) for the next change
         self._mu_prev = mu_e.copy()
         self._sigma_prev = sigma_e.copy()
+        self._n_changes += 1
         if self.multi_source:
             self._feature_history.append((mu_e.copy(), sigma_e.copy()))
             if len(self._feature_history) > self.history_size:
@@ -253,6 +351,9 @@ class LDTNSGA2:
             # v3.0 (plan 2.6): None = "not measurable yet"; never a fake 0.0
             "Dk": (None if Dk is None else float(Dk)),
             "sigma_scale": sigma_scale,
+            # v3.1 (plan 3.1): which step was actually taken, so the online
+            # adaptation is auditable per environment (parameter stability).
+            "alpha_k": float(self._alpha_used),
         }
 
     def _resize(self, X, N, xl, xu, rng):
@@ -284,6 +385,45 @@ class LDTNSGA2Alpha1(LDTNSGA2):
 
     def __init__(self, trend_alpha=1.0, **kwargs):
         super().__init__(trend_alpha=trend_alpha, **kwargs)
+
+
+class LDTNSGA2Adaptive(LDTNSGA2):
+    """LDT-NSGA-II with the ONLINE adaptive trend step (plan 3.1).
+
+    Motivation.  The v2.4/v2.5 experiments established two facts that no single
+    fixed coefficient can satisfy at once:
+
+    * on problems whose Pareto set TRANSLATES regularly (FDA1/FDA3/FDA4,
+      dMOP2A, dMOP3A), the full step ``alpha = 1.0`` wins on 11 of 12
+      configurations -- the default half step systematically under-extrapolates;
+    * on the authoritative Type III problem dMOP1A, whose Pareto set is STATIC
+      and only the front rotates, the half step beats the full step by 127%
+      (0.0251 vs 0.0570), because the centre increment consists almost entirely
+      of sampling noise and a full step amplifies it into a systematic offset.
+
+    This class therefore chooses ``alpha_k`` ONLINE, per environment change:
+
+        movement = ||mu_e - mu_prev||_2 / sqrt(D)          (decision space)
+        noise    = mean_j bootstrap-SD of centre coordinate j
+        ratio    = movement / noise
+        s_k      = clip((ratio - gamma) / (2*gamma), 0, 1)
+        alpha_k  = alpha_min + (alpha_max - alpha_min) * s_k
+
+    Plan 3.1 insists that the DECISION-space displacement be separated from the
+    OBJECTIVE-space change ``D_k``; this implementation uses only the former for
+    the step choice (``D_k`` still feeds the optional sigma scaling).
+
+    Defaults: ``alpha_min = 0.5`` (both registered endpoints are supported by
+    the existing evidence) and ``alpha_max = 1.0``; ``gamma = 1.0`` means "one
+    noise unit".  ``conservative_first_change`` takes the low end on the very
+    first change, where no prediction residual exists yet.
+    """
+    name = "ldt_adaptive"
+
+    def __init__(self, adaptive_alpha=True, alpha_min=0.5, alpha_max=1.0,
+                 gamma=1.0, **kwargs):
+        super().__init__(adaptive_alpha=adaptive_alpha, alpha_min=alpha_min,
+                         alpha_max=alpha_max, gamma=gamma, **kwargs)
 
 
 # Backward-compatible alias for existing experiment scripts
