@@ -1,17 +1,40 @@
-# Main comparison experiment configuration.
-# Problems x tau_t x algorithms x seeds. Mirrors experiments/run_comparison.py.
-experiment: comparison
+# Main comparison experiment (v3.2) -- THE authoritative definition.
+#
+# Plan 5.3: YAML is the single source of truth for an experiment.  CLI flags
+# override these values, and every override is validated and echoed, so the two
+# can never silently disagree.  Run with:
+#
+#     python -m experiments.run_from_config configs/main_experiment.yaml
+#
+# This file REPLACES an earlier stale version that used key names no script
+# read (`experiment`, `tau_t_values`, `population_size`, `out_dir`) and still
+# declared `code_version: v1.0`.  Those keys are now rejected by the loader
+# rather than silently ignored.
+#
+# Budget note: every arm gets N * tau_t objective evaluations per environment,
+# identical across algorithms.  Do not change that here without re-running all
+# arms.
+
+name: 主比较实验
+description: 六个基线 + LDT 在 FDA1/FDA3/FDA4 上、三种变化频率下的配对比较
+
 problems: [FDA1, FDA3, FDA4]
-tau_t_values: [10, 25, 50]
-n_t: 20
-population_size: 100        # N
+taus: [10, 25, 50]
+seeds: "0-29"
+
+algorithms:
+  - nsga2_static
+  - dnsga2_inspired
+  - ar1_predictive
+  - gmm_inspired
+  - pps
+  - ldt_nsga2
+
+N: 100
 n_gen: 300
-algorithms: [DNSGA2, AR_NSGA2, GMM_Transfer, LDMT_NSGA2]
-seeds: "0-29"               # 30 seeds
-code_version: v1.0
-metrics: [IGD, HV, generation_runtime_s, migration_runtime_s]
-out_dir: results/raw
-notes: >
-  Resumable: skips (problem,tau,algo,seed) combos already present in the
-  output CSV. A fresh NSGA2 instance is created each environment segment,
-  seeded run_seed+env_index.
+n_t: 20
+
+out: results/raw
+experiment_group: comparison
+code_version: v3.2
+n_points: 500

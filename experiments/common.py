@@ -22,10 +22,12 @@ from typing import List, Optional
 import numpy as np
 
 from problems import (FDA1, FDA3, FDA4, DMOP1, DMOP2, DMOP3,
-                      DMOP1A, DMOP2A, DMOP3A)
+                      DMOP1A, DMOP2A, DMOP3A,
+                      IrregularFDA1, ReversedFDA1, GradualFDA1, NoisyFDA1)
 from algorithms import (NSGA2Static, DNSGA2Response, ARNSGA2, GMMTransfer,
-                         LDTNSGA2, LDTNSGA2Alpha1, LDTNSGA2Adaptive, PPSNSGA2,
-                         DynamicDriver)
+                         LDTNSGA2, LDTNSGA2Alpha1, LDTNSGA2Adaptive,
+                         LDTNSGA2Cov, LDTNSGA2LowRank, LDTNSGA2Gated,
+                         LDTNSGA2Full, PPSNSGA2, DynamicDriver)
 
 PROBLEM_REGISTRY = {
     "FDA1": FDA1,
@@ -38,6 +40,13 @@ PROBLEM_REGISTRY = {
     "DMOP1A": DMOP1A,
     "DMOP2A": DMOP2A,
     "DMOP3A": DMOP3A,
+    # v3.2 (plan 4.2): project-defined stress variants of FDA1.  Each relaxes
+    # exactly one temporal or measurement assumption; they are NOT literature
+    # benchmarks and must be labelled as project variants in any write-up.
+    "IRREG_FDA1": IrregularFDA1,
+    "REV_FDA1": ReversedFDA1,
+    "GRAD_FDA1": GradualFDA1,
+    "NOISY_FDA1": NoisyFDA1,
 }
 
 # CLI name -> class. Each class has ONE canonical id (.name attribute).
@@ -56,6 +65,12 @@ ALGORITHM_REGISTRY = {
     # v3.1 (plan 3.1): LDT with the ONLINE adaptive trend step.  Also NOT part
     # of CANONICAL_ALGOS, so no existing artefact or default list changes.
     "ldt_adaptive": LDTNSGA2Adaptive,
+    # v3.2 (plan 3.2/3.3): correlated / low-rank modelling and transfer gating.
+    # Also OUTSIDE CANONICAL_ALGOS so no default list changes.
+    "ldt_cov": LDTNSGA2Cov,
+    "ldt_lowrank": LDTNSGA2LowRank,
+    "ldt_gated": LDTNSGA2Gated,
+    "ldt_v32": LDTNSGA2Full,
     # human-readable CLI names
     "NSGA-II": NSGA2Static,               # static baseline (no migrants)
     "DNSGA-II-inspired": DNSGA2Response,  # random-immigrant response
@@ -85,6 +100,10 @@ ALGO_DISPLAY = {
     "ldt_nsga2": "LDT-NSGA-II",
     "ldt_alpha1": "LDT-NSGA-II (alpha=1.0)",
     "ldt_adaptive": "LDT-NSGA-II (adaptive alpha)",
+    "ldt_cov": "LDT-NSGA-II (full covariance)",
+    "ldt_lowrank": "LDT-NSGA-II (low-rank)",
+    "ldt_gated": "LDT-NSGA-II (gated transfer)",
+    "ldt_v32": "LDT-NSGA-II (v3.2 bundle)",
 }
 
 # legacy CSV labels -> canonical ids (analyze-time normalization only)

@@ -1,18 +1,32 @@
-# Sensitivity study configuration. Mirrors experiments/run_sensitivity.py.
-experiment: sensitivity
-algorithm: LDMT_NSGA2
-problem: FDA3
-tau_t: 25
-n_gen: 300
+# Sensitivity study (v3.2) -- authoritative definition.
+#
+# Four one-dimensional sweeps.  Each swept value is recorded in the run
+# metadata (experiment_group + config), so a sweep can never be merged with the
+# main comparison -- that was the v2.x bug behind K28.
+
+name: 敏感性实验
+description: 对 N / n_t / rho / alpha 各做一维扫描
+
+problems: [FDA1, FDA3, FDA4]
+taus: [25]
 seeds: "0-29"
+
+algorithms: [ldt_nsga2]
+
+N: 100
+n_gen: 300
+n_t: 20
+
+out: results/raw
+experiment_group: sensitivity
+code_version: v3.2
+
 studies:
-  - name: population_size
-    variable: N
-    values: [50, 100, 150]
-    fixed_n_t: 20
-  - name: environment_resolution
-    variable: n_t
+  - name: N
+    values: [50, 100, 200]
+  - name: n_t
     values: [10, 20, 40]
-    fixed_N: 100
-code_version: v1.0
-out_dir: results/raw
+  - name: rho
+    values: [0.25, 0.5, 0.75]
+  - name: alpha
+    values: [0.0, 0.25, 0.5, 0.75, 1.0]

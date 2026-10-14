@@ -70,6 +70,14 @@ HELDOUT_TAUS = [10, 25, 50]
 ENDPOINT_PROBLEMS = ["DMOP1A", "FDA1"]
 ENDPOINT_TAUS = [10, 25, 50]
 
+# v3.2 (plan 3.2/3.3): mechanism comparison for the §7 roadmap features.  Every
+# arm differs from the plain LDT only in the named mechanism, so the comparison
+# is attributable; all arms share budget N*tau_t per environment.
+V32_PROBLEMS = ["FDA1", "FDA3", "FDA4"]
+V32_TAUS = [10, 25, 50]
+V32_ARMS = ["ldt_half", "ldt_full", "ldt_adaptive", "ldt_cov", "ldt_lowrank",
+            "ldt_gated", "ldt_v32"]
+
 COMPARISON_ALGOS = ["ldt_adaptive", "ldt_alpha0", "ldt_half", "ldt_full",
                     "pps", "nsga2_static"]
 
@@ -109,6 +117,11 @@ ARM_SPEC = {
     "ldt_alpha0": ("ldt_alpha0", "ldt_nsga2", {"trend_alpha": 0.0}),
     "pps": ("pps", "pps", {}),
     "nsga2_static": ("nsga2_static", "nsga2_static", {}),
+    # v3.2 roadmap mechanisms (plan 3.2 / 3.3)
+    "ldt_cov": ("ldt_cov", "ldt_cov", {}),
+    "ldt_lowrank": ("ldt_lowrank", "ldt_lowrank", {"low_rank": 3}),
+    "ldt_gated": ("ldt_gated", "ldt_gated", {}),
+    "ldt_v32": ("ldt_v32", "ldt_v32", {}),
 }
 
 
@@ -158,8 +171,8 @@ def _done_seeds(path):
 def main():
     ap = argparse.ArgumentParser(description="v3.1 adaptive-alpha study")
     ap.add_argument("--phase", default="both",
-                    choices=["calibration", "comparison", "endpoint", "both",
-                             "all"])
+                    choices=["calibration", "comparison", "endpoint", "v32",
+                             "both", "all"])
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--candidate", default="0.5,1.0",
                     help="alpha_min,gamma selected from the calibration phase")
@@ -186,8 +199,9 @@ def main():
     phases = {"calibration": ["calibration"],
               "comparison": ["comparison"],
               "endpoint": ["endpoint"],
+              "v32": ["v32"],
               "both": ["calibration", "comparison"],
-              "all": ["calibration", "comparison", "endpoint"]}[args.phase]
+              "all": ["calibration", "comparison", "endpoint", "v32"]}[args.phase]
     print(f"[v3.1] code_version={CODE_VERSION} out={out} "
           f"workers={args.workers} selected=(alpha_min={amin}, gamma={gam})")
 
@@ -203,6 +217,11 @@ def main():
             these = seeds_override if seeds_override is not None \
                 else list(range(30))
             arms = COMPARISON_ALGOS
+        elif phase == "v32":
+            probs, taus = V32_PROBLEMS, V32_TAUS
+            these = seeds_override if seeds_override is not None \
+                else list(range(30))
+            arms = V32_ARMS
         else:
             probs, taus = HELDOUT_PROBLEMS, HELDOUT_TAUS
             these = seeds_override if seeds_override is not None \

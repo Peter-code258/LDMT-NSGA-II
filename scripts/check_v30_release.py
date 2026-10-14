@@ -36,8 +36,8 @@ def check(label, cond, detail=""):
 
 print("=== 1. deliverables ===")
 for name, min_pages_hint in [
-    ("LDT-NSGA-II实验论文v3.1.docx", "185"),
-    ("LDT-NSGA-II实验论文v3.1.md", ""),
+    ("LDT-NSGA-II实验报告v3.2.docx", "185"),
+    ("LDT-NSGA-II实验报告v3.2.md", ""),
     ("LDT-NSGA-II本科毕业论文.docx", "28"),
     ("LDT-NSGA-II开题报告.docx", "29"),
     ("LDT-NSGA-II V2.5答辩.html", ""),
@@ -122,7 +122,7 @@ check("test_v31_adaptive_alpha.py exists",
 
 print()
 print("=== 6. theses reflect v3.0 ===")
-master = io.open(os.path.join(MAT, "LDT-NSGA-II实验论文v3.1.md"), encoding="utf-8").read()
+master = io.open(os.path.join(MAT, "LDT-NSGA-II实验报告v3.2.md"), encoding="utf-8").read()
 check("master has 4.7 v3.0 data-trustworthiness section",
       "v3.0 数据可信度层" in master)
 check("master K-list spans K1-K34",
@@ -143,7 +143,7 @@ code_readme = io.open(os.path.join(PROJ, "README.md"), encoding="utf-8").read()
 for name, s in (("文档/README.md", docs_readme), ("LDT-NSGA-II/README.md", code_readme)):
     check(f"{name} mentions v3.1", "v3.1" in s)
     check(f"{name} mentions the current page count",
-          "188 页" in s or "185 页" in s or "177" in s)
+          any(k in s for k in ("199 页", "188 页", "185 页", "177")))
     # A *bare* "源文件" is only a hazard when it is used as a PATH. Prose such as
     # "改源文件再重新构建" is legitimate, so look at path-shaped occurrences.
     bare_paths = re.findall(r"[\w./\\]*?(?<!_)\u6e90\u6587\u4ef6[\\/]", s)
@@ -152,9 +152,9 @@ for name, s in (("文档/README.md", docs_readme), ("LDT-NSGA-II/README.md", cod
     check(f"{name} mentions 中期检查报告", "中期检查报告" in s)
 
 check("docs README references the current thesis name",
-      re.search(r"LDT-NSGA-II实验论文v3\.[01]\.docx", docs_readme) is not None)
+      re.search(r"LDT-NSGA-II(实验论文|实验报告)v3\.[0-9]+\.docx", docs_readme) is not None)
 check("code README references the current thesis name",
-      re.search(r"LDT-NSGA-II实验论文v3\.[01]\.docx", code_readme) is not None)
+      re.search(r"LDT-NSGA-II(实验论文|实验报告)v3\.[0-9]+\.docx", code_readme) is not None)
 check("code README points at the mid-term report archive",
       "中期检查报告" in code_readme)
 
@@ -162,6 +162,28 @@ check("master records the K34 retraction of conclusion 3",
       "\u64a4\u56de" in master and "0.05697" in master)
 check("master documents the adaptive-alpha study",
       "ldt_adaptive" in master)
+
+print()
+print("=== 8b. v3.2 roadmap delivery ===")
+for rel in (("results", "summary_v32", "v32_mechanisms.md"),
+            ("scripts", "v32_analysis.py"),
+            ("scripts", "multiresolution_check.py"),
+            ("scripts", "igd_area.py"),
+            ("experiments", "config.py"),
+            ("experiments", "run_from_config.py"),
+            ("problems", "extended.py"),
+            ("tests", "test_v32_roadmap.py")):
+    check("present: " + "/".join(rel),
+          os.path.exists(os.path.join(PROJ, *rel)))
+for v in ("ldt_cov", "ldt_lowrank", "ldt_gated", "ldt_v32"):
+    check(f"{v} registered",
+          v in io.open(os.path.join(PROJ, "experiments", "common.py"),
+                       encoding="utf-8").read())
+_ug = io.open(os.path.join(MAT, "LDT-NSGA-II本科毕业论文.md"), encoding="utf-8").read()
+check("theses record the v3.2 mechanism results",
+      "v3.2" in master and "v3.2" in _ug)
+check("no personal identifiers in the report source",
+      not any(t in master for t in ("彭灿", "邹娟", "湘潭大学", "兴湘学院")))
 
 print()
 print("=== 8. v3.1 adaptive-alpha evidence ===")

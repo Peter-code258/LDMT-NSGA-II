@@ -137,6 +137,10 @@ def get_true_pf(problem_name, M=None, n_points=500, t=None):
     time-invariant fronts. Cached by (name, M, n_points, t_bucket).
     """
     name = problem_name.upper()
+    # v3.2 (plan 4.2): the extended stress variants are built on FDA1 and share
+    # its TIME-INVARIANT front, so they resolve to the same analytical front.
+    if name in ("IRREG_FDA1", "REV_FDA1", "GRAD_FDA1", "NOISY_FDA1"):
+        name = "FDA1"
     if M is None:
         M = 3 if name in ("FDA4", "FDA5") else 2
     t_bucket = None if t is None else round(float(t), 6)

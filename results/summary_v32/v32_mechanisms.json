@@ -1,0 +1,70 @@
+{
+  "ldt_full": {
+    "steady": 0.03499412503478806,
+    "post_change": 0.053084315914990486,
+    "recovery": 15.831062347614072,
+    "migration_s": 0.04944887703703492,
+    "area": 0.0115294670941374,
+    "rank": 1.2222222222222223,
+    "vs_default_better": 9,
+    "vs_default_worse": 0
+  },
+  "ldt_adaptive": {
+    "steady": 0.03505675753219773,
+    "post_change": 0.05316591244888233,
+    "recovery": 15.595218855218853,
+    "migration_s": 0.07543700222222195,
+    "area": 0.011547109635037741,
+    "rank": 1.8888888888888888,
+    "vs_default_better": 8,
+    "vs_default_worse": 0
+  },
+  "ldt_cov": {
+    "steady": 0.037557160388895276,
+    "post_change": 0.06229867945265298,
+    "recovery": 21.885424358527807,
+    "migration_s": 0.06944679518518837,
+    "area": 0.01800034205599326,
+    "rank": 3.4444444444444446,
+    "vs_default_better": 9,
+    "vs_default_worse": 0
+  },
+  "ldt_lowrank": {
+    "steady": 0.03727751178323914,
+    "post_change": 0.062144267227277186,
+    "recovery": 21.60796470451643,
+    "migration_s": 0.06509702592592331,
+    "area": 0.017970416266639262,
+    "rank": 3.4444444444444446,
+    "vs_default_better": 8,
+    "vs_default_worse": 0
+  },
+  "ldt_half": {
+    "steady": 0.03864124661285124,
+    "post_change": 0.06365424156392865,
+    "recovery": 22.070029025891092,
+    "migration_s": 0.05072173740740725,
+    "area": 0.018168665505205746,
+    "rank": 5.333333333333333
+  },
+  "ldt_gated": {
+    "steady": 0.038593479021982485,
+    "post_change": 0.06409435315708562,
+    "recovery": 22.203915012190873,
+    "migration_s": 0.049460610740746036,
+    "area": 0.018490678196085887,
+    "rank": 5.777777777777778,
+    "vs_default_better": 0,
+    "vs_default_worse": 0
+  },
+  "ldt_v32": {
+    "steady": 0.04334989449667999,
+    "post_change": 0.09130143440449597,
+    "recovery": 23.371724137931036,
+    "migration_s": 0.07172651333331652,
+    "area": 0.037892939958841895,
+    "rank": 6.888888888888889,
+    "vs_default_better": 0,
+    "vs_default_worse": 6
+  }
+}

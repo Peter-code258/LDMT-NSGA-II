@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v2.4</title>
+<title>LDT-NSGA-II 动态多目标优化算法 · 实验报告 v3.0</title>
 <style>
 :root {
   --page: #ffffff;
@@ -1256,7 +1256,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     <div class="wheel-track" id="wheelTrack">
       <a class="wheel-btn" href="#executive" data-index="0"><span class="wb-num">01</span><span class="wb-label">核心结论</span></a>
       <a class="wheel-btn" href="#setup" data-index="1"><span class="wb-num">02</span><span class="wb-label">实验设置</span></a>
-      <a class="wheel-btn" href="#v21" data-index="2"><span class="wb-num">03</span><span class="wb-label">v2.1扩展</span></a>
+      <a class="wheel-btn" href="#v21" data-index="2"><span class="wb-num">03</span><span class="wb-label">算法扩展</span></a>
       <a class="wheel-btn" href="#main-results" data-index="3"><span class="wb-num">04</span><span class="wb-label">主对比</span></a>
       <a class="wheel-btn" href="#friedman" data-index="4"><span class="wb-num">05</span><span class="wb-label">统计检验</span></a>
       <a class="wheel-btn" href="#recovery" data-index="5"><span class="wb-num">06</span><span class="wb-label">恢复曲线</span></a>
@@ -1272,7 +1272,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
 <div class="wheel-floating-label" id="wheelFloatingLabel"></div>
 <main class="doc-page">
   <header class="doc-cover" id="cover">
-    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v2.4</div>
+    <div class="doc-cover-overline">动态多目标优化 · 实验报告 · v3.0</div>
     <h1>LDT-NSGA-II 算法完整实验结果</h1>
     <div class="doc-cover-subtitle">
       面向 FDA / dMOP 测试集的对比、消融、敏感性、Friedman 统计检验与恢复速度分析
@@ -1346,7 +1346,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
         <tr><td>FDA4</td><td>DMOP</td><td>多模态，PS/PF 联动</td><td>3</td></tr>
         <tr><td>dMOP1</td><td>DMOP</td><td>PS 平移，PF 固定</td><td>2</td></tr>
         <tr><td>dMOP2</td><td>DMOP</td><td>PS 平移 + PF 随 G 平移</td><td>2</td></tr>
-        <tr><td>dMOP3 <span class="pill">v2.4</span></td><td>DMOP</td><td>静态 POS + 静态 POF（控制组）</td><td>2</td></tr>
+        <tr><td>dMOP3 <span class="pill">v3.0</span></td><td>DMOP</td><td>静态 POS + 静态 POF（控制组）</td><td>2</td></tr>
       </tbody>
     </table>
     <h3>2.2 算法参数</h3>
@@ -1364,22 +1364,22 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
     </table>
     <div class="doc-note">
       <strong>统计检验：</strong>所有均值差异经 Wilcoxon 秩和检验（α = 0.05）验证，
-      报告中标注 <span class="pill">†</span> 表示该组合的最优值。v2.1 新增
+      报告中标注 <span class="pill">†</span> 表示该组合的最优值；并含
       <strong>Friedman + Nemenyi 后验检验</strong>用于多算法多问题整体排序。
     </div>
   </section>
 
   <section id="v21" class="doc-block">
-    <h2>3. v2.1 算法扩展</h2>
+    <h2>3. 算法扩展与可选机制</h2>
     <p>
-      在 v2.0（开题报告 2.0 内核）基础上，v2.1 引入三个可选模块与两项分析增强，
+      在开题报告 2.0 内核基础上，后续版本陆续引入三个可选模块与两项分析增强，
       全部默认关闭以保持核心算法稳定，可通过参数开启进行对比研究。
     </p>
     <table class="doc-table">
       <thead><tr><th>模块</th><th>参数</th><th>机制</th><th>状态</th></tr></thead>
       <tbody>
         <tr><td><strong>PPS 基线</strong></td><td>—</td>
-          <td>种群中心一阶差分外推预测 + 20% 随机移民（Zhou et al. 2014）</td>
+          <td>种群中心一阶差分外推预测 + 10% 随机移民（Zhou et al. 2014；K19 复核更正）</td>
           <td><span class="pill">新增基线</span></td></tr>
         <tr><td><strong>dMOP3 问题</strong></td><td>—</td>
           <td>静态 POS + 时变 POF，丰富变化类型覆盖</td>
@@ -1402,13 +1402,19 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </tbody>
     </table>
     <div class="doc-callout is-tip">
-      <strong>验证状态：</strong>v2.1 全部 29 个单元测试通过（含 9 个新特性测试）；
-      PPS 与 dMOP3 已在快速冒烟实验中验证端到端运行正常。
+      <strong>验证状态：</strong>v3.0 全部 <span class="key-stat">77</span> 个单元测试通过
+      （含 K1 回归 3 个、v2.4 修复回归 15 个、v3.0 可信度回归 13 个）；
+      PPS 与权威 dMOP 已在冒烟实验中验证端到端运行正常。
+      <br><strong>v3.0 数据可信度层：</strong>每次运行绑定不可变 <code>run_id</code>、
+      记录配置哈希 <code>config_hash</code>、由配置注入 <code>code_version</code>（缺省 <code>unknown</code>），
+      并按预期行数核验逐代 CSV 完整性；补齐 <code>pandas</code> 依赖、去除报告构建的本机绝对路径、新增跨平台 CI。
+      该层只影响数据可追溯性与复现性，<strong>不改变搜索行为、不重跑实验</strong>。
+      全部已知问题与不确定性以 <strong>K1–K34</strong> 清单如实披露。
     </div>
   </section>
 
   <section id="friedman" class="doc-block">
-    <h2>4. Friedman + Nemenyi 统计检验 <span class="pill">v2.1</span></h2>
+    <h2>4. Friedman + Nemenyi 统计检验 <span class="pill">v3.0</span></h2>
     <p>
       Friedman 检验用于判断多个算法在多个问题上的排序是否存在显著差异；
       若显著，Nemenyi 后验检验给出临界差异（CD），排名差超过 CD 即认为差异显著。
@@ -1440,7 +1446,7 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
   </section>
 
   <section id="recovery-speed" class="doc-block">
-    <h2>5. 恢复速度分析 <span class="pill">v2.1</span></h2>
+    <h2>5. 恢复速度分析 <span class="pill">v3.0</span></h2>
     <p>
       恢复代数（Recovery Generations）定义为环境变化后，种群 IGD 恢复到
       变化前最后一代水平所需的代数。该指标直接量化算法在动态环境中的响应速度。
@@ -1473,9 +1479,10 @@ var Fr={},Gr={};var Wr,Hr=function(){function t(t,e,n){var i=this;this._sleepAft
       </table>
     </div>
     <div class="chart-analysis">
-      <p><strong>解读：</strong>恢复代数越小，算法响应越快。LDMT/LDT 系列
-        相比 DNSGA-II（无迁移）恢复代数显著更低，验证了分布迁移对快速跟踪
-        新前沿的贡献。完整数据见 results/summary/recovery_generations.csv。</p>
+      <p><strong>解读：</strong>恢复代数越小，算法响应越快。PPS 中心预测的恢复代数最低
+        （FDA1 10.29 / FDA3 13.97 / FDA4 9.65），LDT-NSGA-II 与 AR(1) 随后，
+        二者均显著低于 DNSGA-II（无迁移）——说明基于历史信息的迁移/预测确实加快了对新前沿的跟踪。
+        完整数据见 results/summary/recovery_generations.csv。</p>
     </div>
   </section>
 

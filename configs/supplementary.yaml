@@ -1,0 +1,29 @@
+# Supplementary / authoritative-dMOP experiment (v3.2).
+#
+# The dMOP PROJECT VARIANTS (DMOP1/2/3) and the AUTHORITATIVE definitions
+# (DMOP1A/2A/3A) are deliberately separate lists: they are different problems
+# and must never be pooled.
+
+name: dMOP 补充实验
+description: 项目变体 DMOP1/2/3 与权威 dMOP1A/2A/3A，tau=25
+
+problems: [DMOP1, DMOP2, DMOP3]
+authoritative_problems: [DMOP1A, DMOP2A, DMOP3A]
+taus: [25]
+seeds: "0-29"
+
+algorithms:
+  - nsga2_static
+  - dnsga2_inspired
+  - ar1_predictive
+  - gmm_inspired
+  - pps
+  - ldt_nsga2
+
+N: 100
+n_gen: 300
+n_t: 20
+
+out: results/raw
+experiment_group: supplementary
+code_version: v3.2

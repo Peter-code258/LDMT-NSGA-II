@@ -9,6 +9,9 @@ Two families are provided:
   serves as a static control).
 * ``DMOP1A``/``DMOP2A``/``DMOP3A`` -- the **authoritative** dMOP1/dMOP2/dMOP3
   of Goh & Tan (2009), added in v2.5 for the supplementary experiment.
+* ``IRREG_FDA1``/``REV_FDA1``/``GRAD_FDA1``/``NOISY_FDA1`` -- **project-defined
+  stress variants** (v3.2, plan 4.2) that relax exactly one temporal or
+  measurement assumption of FDA1.  They are NOT literature benchmarks.
 """
 from .base import DynamicProblem
 from .fda1 import FDA1
@@ -21,6 +24,10 @@ from .dmop1a import DMOP1A
 from .dmop2a import DMOP2A
 from .dmop3a import DMOP3A
 from .true_fronts import get_true_pf
+from .extended import (IrregularFDA1, ReversedFDA1, GradualFDA1, NoisyFDA1,
+                        EXTENDED_PROBLEMS, EXTENDED_LABELS)
 
 __all__ = ["DynamicProblem", "FDA1", "FDA3", "FDA4", "DMOP1", "DMOP2",
-           "DMOP3", "DMOP1A", "DMOP2A", "DMOP3A", "get_true_pf"]
+           "DMOP3", "DMOP1A", "DMOP2A", "DMOP3A", "get_true_pf",
+           "IrregularFDA1", "ReversedFDA1", "GradualFDA1", "NoisyFDA1",
+           "EXTENDED_PROBLEMS", "EXTENDED_LABELS"]

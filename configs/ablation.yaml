@@ -1,14 +1,31 @@
-# Ablation study configuration. Mirrors experiments/run_ablation.py.
-experiment: ablation
+# Ablation study (v3.2) -- authoritative definition.
+#
+# Variants disable ONE component of LDT-NSGA-II at a time so the contribution of
+# each is measurable.  These names match experiments/run_ablation.py exactly.
+#
+# "full" is the complete method.  A/B/C switch off trend extrapolation,
+# distribution transfer, and old-population retention respectively.
+
+name: 消融实验
+description: 逐个关闭 LDT 组件，定位各组件贡献
+
 problems: [FDA1, FDA3, FDA4]
-tau_t: 25
-n_t: 20
-population_size: 100
-n_gen: 300
+taus: [25]
 seeds: "0-29"
+
+algorithms: [ldt_nsga2, ldt_ablation_a, ldt_ablation_b, ldt_ablation_c]
+algo_kwargs: {}
+
+N: 100
+n_gen: 300
+n_t: 20
+
+out: results/raw
+experiment_group: ablation
+code_version: v3.2
+
 variants:
-  full: "standard LDMT-NSGA-II (70/20/10, alpha=1.0)"
-  no_feature_simplification: "GMM/covariance distribution description instead of mean-std, keep transfer+lambda"
-  no_transfer: "feature extraction kept but no center/scale mapping, reuse prev pop + random response"
-code_version: v1.0
-out_dir: results/raw
+  full: "完整 LDT-NSGA-II（alpha=0.5，50/20/30）"
+  A: "关闭趋势外推（alpha=0）"
+  B: "关闭分布迁移（迁移个体改为均匀随机）"
+  C: "关闭旧解保留（kappa=0）"
