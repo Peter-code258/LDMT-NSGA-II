@@ -127,22 +127,43 @@ def test_ldt_respond_in_bounds_and_shape():
     p = FDA1(tau_t=5, n_t=10)
     X = rng.uniform(p.xl, p.xu, size=(50, p.n_var))
     F = p._calc_objectives(X)
-    new_X, info = LDTNSGA2().respond(X, F, p, 1, rng)
+    # v3.0 (plan 2.6): a response is only defined against a baseline, so
+    # establish one first (the driver now does this every environment).
+    algo = LDTNSGA2()
+    algo.establish_baseline(p)
+    p.set_generation(5)           # environment changes
+    new_X, info = algo.respond(X, F, p, 1, rng)
     assert new_X.shape == X.shape
     xl, xu = np.asarray(p.xl), np.asarray(p.xu)
     assert np.all(new_X >= xl - 1e-12) and np.all(new_X <= xu + 1e-12)
     assert "Dk" in info and "sigma_scale" in info
-    assert np.isfinite(info["Dk"]) and np.isfinite(info["sigma_scale"])
+    # with a baseline the change magnitude is a real, finite number
+    assert info["Dk"] is not None
+    assert np.isfinite(info["Dk"])
+    assert np.isfinite(info["sigma_scale"])
+
+
+def test_dk_is_none_without_baseline():
+    """v3.0 (plan 2.6): "not measurable" must not masquerade as "no change"."""
+    rng = np.random.default_rng(11)
+    p = FDA1(tau_t=5, n_t=10)
+    X = rng.uniform(p.xl, p.xu, size=(50, p.n_var))
+    F = p._calc_objectives(X)
+    _, info = LDTNSGA2().respond(X, F, p, 1, rng)
+    assert info["Dk"] is None, "unknown change must be reported as None"
 
 
 def test_ldt_adaptive_sigma_scale_capped():
     rng = np.random.default_rng(5)
     p = FDA1(tau_t=5, n_t=10)
     algo = LDTNSGA2(adaptive_transfer=True, adaptive_beta=1e6)
+    # v3.0 (plan 2.6): establish the baseline so D_k is measurable
+    algo.establish_baseline(p)
     X = rng.uniform(p.xl, p.xu, size=(50, p.n_var))
     F = p._calc_objectives(X)
+    p.set_generation(5)  # change environment -> nonzero D_k on 1st respond
     _, info0 = algo.respond(X, F, p, 0, rng)
-    p.set_generation(5)  # change environment -> nonzero D_k on 2nd respond
+    p.set_generation(10)
     _, info1 = algo.respond(X, F, p, 1, rng)
     lo, hi = algo.SIGMA_SCALE_MIN, algo.SIGMA_SCALE_MAX
     assert lo <= info0["sigma_scale"] <= hi

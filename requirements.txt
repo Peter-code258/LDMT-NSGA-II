@@ -1,8 +1,17 @@
-pymoo>=0.6
-numpy
-scipy
-scikit-learn
-matplotlib
-pyyaml
-tqdm
-pytest
+# LDT-NSGA-II runtime dependencies (v3.0)
+#
+# plan 2.5: pandas is imported by evaluation/statistics.py and
+# scripts/thesis_analysis.py but was previously missing here, so a clean
+# environment installed from this file could not run the analysis path.
+#
+# Versions below are the ones verified installed in the environment that ran
+# the reported experiments (`pip show` / module __version__, 2026-10-14).
+pymoo==0.6.1.5
+numpy==2.0.2
+scipy==1.13.1
+scikit-learn==1.6.1
+pandas==2.3.3
+matplotlib==3.9.4
+PyYAML==6.0.3
+tqdm==4.70.1
+pytest==8.4.2

@@ -118,6 +118,8 @@ def test_ldt_pluggable_strategy():
     prev_X = rng.uniform(prob.xl, prob.xu, size=(N, D))
     prev_F = prob._calc_objectives(prev_X)
     algo = LDTNSGA2(transfer_strategy=MomentTransferStrategy())
+    algo.establish_baseline(prob)     # v3.0 (plan 2.6): need a baseline first
+    prob.set_generation(10)           # environment changes
     new_X, info = algo.respond(prev_X, prev_F, prob, 1, rng)
     assert new_X.shape == (N, D)
     assert np.all(np.isfinite(new_X))

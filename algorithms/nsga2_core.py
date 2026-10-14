@@ -81,7 +81,7 @@ class DynamicDriver:
     """
 
     def __init__(self, algorithm, problem, problem_name, n_envs,
-                 pop_size, run_seed):
+                 pop_size, run_seed, code_version="unknown"):
         self.algorithm = algorithm
         self.problem = problem
         self.problem_name = problem_name
@@ -100,9 +100,16 @@ class DynamicDriver:
         # per environment); we sum the per-env totals here for budget audit.
         self.n_eval_total = 0
         self.n_eval_per_env = []
-        # v2.4: diagnostic stamp written into each per-generation CSV row.
-        # Existing v2.2/v2.3 CSVs keep their original stamps (no re-run).
-        self.code_version = "v2.4"
+        # v3.0 (plan 2.1): the version stamp written into every per-generation
+        # row is now INJECTED from the run configuration instead of being
+        # hard-coded here.  Previously this was the literal "v2.4", so every
+        # CSV carried v2.4 no matter which code actually produced it -- which
+        # is exactly why the v2.5 data on disk was stamped "v2.2"/"v2.4".
+        # Existing v2.2/v2.3/v2.4/v2.5 CSVs keep their original stamps.
+        self.code_version = str(code_version)
+        # v3.0 (plan 2.1): immutable identity for this run, propagated into
+        # every row so a single CSV line can be traced back to one run.
+        self.run_id = ""
 
     def run(self, n_points=500):
         rng = np.random.default_rng(self.run_seed)
@@ -111,6 +118,13 @@ class DynamicDriver:
         for k in range(self.n_envs):
             g_start = k * self.tau_t
             self.problem.set_generation(g_start)
+            # v3.0 (plan 2.6): record the probe's objective values in THIS
+            # environment before the search runs, so the next environment's
+            # change magnitude D_k has a well-defined predecessor.  Without
+            # this, the first response had no baseline and reported D_k = 0.0.
+            baseline = getattr(self.algorithm, "establish_baseline", None)
+            if callable(baseline):
+                baseline(self.problem)
             # ---- warm-start decision variables ----
             t0_mig = time.perf_counter()
             if k == 0:
@@ -174,6 +188,7 @@ class DynamicDriver:
                     "migration_runtime_s": mig_recorded,
                     "n_evaluations": n_eval,
                     "code_version": self.code_version,
+                    "run_id": self.run_id,
                     "lambda_k": lam_k,
                     "boundary_clip_ratio": bclip,
                     "n_nd": n_nd,

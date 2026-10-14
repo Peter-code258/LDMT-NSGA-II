@@ -1,23 +1,51 @@
 #!/usr/bin/env python3
-"""Assemble the LDT experiment report HTML with all data embedded (v2.4).
+"""Assemble the LDT experiment report HTML with all data embedded (v3.0).
 
 v2.4 (K12 fix): doc.css and echarts.min.js are now INLINED at build time so
 the generated index.html is a single self-contained file (previously the
 report linked to assets/ relatively and broke when moved).
+
+v3.0 (plan 2.3): every path is now derived from this file's own location
+instead of a hard-coded Windows directory, so the report can be built from a
+clean clone on any machine.  ``LDT_ROOT`` and ``LDT_OUT`` still override the
+results tree and the output path.  Missing inputs now raise a single explicit
+error listing every absent file, rather than failing later with an opaque
+traceback or silently emitting a report with no charts.
 """
 import json
 import os
 import csv
+import sys
 from pathlib import Path
 from collections import defaultdict
 
-ROOT = Path(r"D:\23-兴湘计科\LDT-NSGA-II")
+# v3.0 (plan 2.3): resolve relative to this script, not to a personal machine.
+ROOT = Path(__file__).resolve().parent
 # v2.2: results tree + output path overridable via environment variables
 RESULTS_ROOT = Path(os.environ.get("LDT_ROOT", str(ROOT)))
 OUT_PATH = Path(os.environ.get(
     "LDT_OUT", str(ROOT / "ldmt-experiment-report" / "index.html")))
 # v2.4 (K12): read assets for inlining (kept on disk as the source of truth)
 _ASSETS = ROOT / "ldmt-experiment-report" / "assets"
+
+# v3.0 (plan 2.3): fail fast with an actionable message.
+_REQUIRED = [
+    _ASSETS / "doc.css",
+    _ASSETS / "echarts.min.js",
+    RESULTS_ROOT / "results/summary/_chart_data.json",
+    RESULTS_ROOT / "results/summary/_recovery.json",
+    RESULTS_ROOT / "results/summary/_boxplot.json",
+]
+_missing = [str(p) for p in _REQUIRED if not p.exists()]
+if _missing:
+    print("build_report.py: missing required input file(s):", file=sys.stderr)
+    for m in _missing:
+        print("  - " + m, file=sys.stderr)
+    print("\nHint: run `python analyze.py` first to regenerate "
+          "results/summary/*, or point LDT_ROOT at a results tree that has it.",
+          file=sys.stderr)
+    raise SystemExit(2)
+
 DOC_CSS = (_ASSETS / "doc.css").read_text(encoding="utf-8")
 ECHARTS_JS = (_ASSETS / "echarts.min.js").read_text(encoding="utf-8")
 CD = json.loads((RESULTS_ROOT / "results/summary/_chart_data.json").read_text(encoding="utf-8-sig"))

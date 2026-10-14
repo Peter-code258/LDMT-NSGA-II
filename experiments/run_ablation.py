@@ -20,7 +20,8 @@ from algorithms.distribution_features import (
     normalize, denormalize, extract_features, non_dominated_set)
 from algorithms.environment_manager import ChangeDetector
 from experiments.common import (RunConfig, ExperimentRunner, problem_factory,
-                                 ROW_FIELDS)
+                                 ROW_FIELDS, make_run_id, git_commit,
+                                 git_dirty, environment_meta)
 
 
 class LDTAblationA(LDTNSGA2):
@@ -113,22 +114,28 @@ def main():
         seeds = seeds[:args.limit_seeds]
 
     cfg = RunConfig(problem=problems[0], tau_t=args.tau, n_t=args.n_t,
-                    N=args.n, n_gen=args.n_gen, seeds=range(30))
+                    N=args.n, n_gen=args.n_gen, seeds=range(30),
+                    code_version="v3.0", experiment_group="ablation")
     runner = ExperimentRunner(out_dir=args.out)
+    # v3.0 (plan 2.2/5.1/5.2): use the same completeness rule and metadata
+    # path as every other experiment, and count failures instead of swallowing
+    # them with a bare ``continue``.
+    runner._expected_rows = int(args.n_gen)
     print(f"Ablation: variants={list(ABLATION_VARIANTS)} problems={problems} "
           f"tau={args.tau} seeds={seeds}")
+    n_failed = 0
+    n_done = 0
     for v in ABLATION_VARIANTS:
         for p in problems:
             for s in seeds:
                 path = os.path.join(args.out, f"ablation_{v}_{p}_tau{args.tau}.csv")
-                if os.path.exists(path):
-                    done = set()
-                    with open(path) as f:
-                        for row in csv.DictReader(f):
-                            if row.get("seed"):
-                                done.add(int(row["seed"]))
-                    if s in done:
-                        continue
+                if s in runner._existing_seeds(path):
+                    continue
+                v_cfg = RunConfig(
+                    problem=p, tau_t=args.tau, n_t=args.n_t, N=args.n,
+                    n_gen=args.n_gen, algorithms=[f"ldt_{v}"], seeds=range(30),
+                    code_version="v3.0", experiment_group="ablation",
+                    extra={"ablation_variant": v})
                 try:
                     rows = run_ablation_variant(v, p, cfg, s)
                     write_header = not os.path.exists(path)
@@ -138,11 +145,34 @@ def main():
                             w.writeheader()
                         for r in rows:
                             w.writerow({k: r.get(k, "") for k in ROW_FIELDS})
+                    runner._append_jsonl("run_meta.jsonl", {
+                        "run_id": make_run_id(v_cfg, f"ldt_{v}", p, s),
+                        "config_hash": v_cfg.config_hash(),
+                        "config": v_cfg.config_dict(),
+                        "experiment_group": "ablation",
+                        "algorithm": f"ldt_{v}", "problem": p,
+                        "tau_t": args.tau, "n_t": args.n_t, "N": args.n,
+                        "n_gen": args.n_gen, "seed": int(s),
+                        "n_gen_rows": len(rows),
+                        "status": "ok", "code_version": "v3.0",
+                        "git_commit": git_commit(),
+                        "git_dirty": git_dirty(),
+                        "environment": environment_meta()})
+                    n_done += 1
                 except Exception as e:
+                    n_failed += 1
                     print(f"  [FAIL] {v}/{p}/seed{s}: {e}")
-                    continue
-    print("Ablation done. CSVs in", args.out)
+                    runner._append_jsonl("failed_runs.jsonl", {
+                        "exp": f"ablation_{v}_{p}_tau{args.tau}",
+                        "algorithm": f"ldt_{v}", "problem": p,
+                        "tau_t": args.tau, "seed": int(s), "error": str(e),
+                        "experiment_group": "ablation",
+                        "code_version": "v3.0",
+                        "git_commit": git_commit()})
+    print(f"Ablation done. completed={n_done} failed={n_failed} "
+          f"CSVs in {args.out}")
+    return 0 if n_failed == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

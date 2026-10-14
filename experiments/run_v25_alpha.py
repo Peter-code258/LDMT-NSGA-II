@@ -82,23 +82,27 @@ def main():
         sys.exit("REFUSED: --out must not point at a frozen v2.4/v2.1 result "
                  "directory. Use results/raw_v25.")
 
+    # v3.0: this driver produced the historical "v2.5" alpha study and its
+    # data is frozen; new runs from it are stamped v3.0 with an explicit
+    # experiment group so the two can never be merged.
     cfg = RunConfig(problem=problems[0] if problems else "FDA1",
                     tau_t=taus[0] if taus else 25, n_t=args.n_t, N=args.n,
                     n_gen=args.n_gen, algorithms=algos, seeds=range(30),
-                    code_version="v2.5")
+                    code_version="v3.0",
+                    experiment_group=f"alpha_{args.phase}")
 
     shown = (seeds[:args.limit_seeds]
              if (args.limit_seeds and args.limit_seeds > 0) else seeds)
-    print(f"[v2.5/{args.phase}] problems={problems} taus={taus} "
+    print(f"[v3.0/alpha-{args.phase}] problems={problems} taus={taus} "
           f"algos={algos} seeds={shown} out={args.out}")
 
     runner = ExperimentRunner(out_dir=args.out)
     summary = runner.run(args.phase, cfg, algorithms=algos,
                          problems=problems, taus=taus, seeds=seeds,
                          limit_seeds=args.limit_seeds,
-                         progress_label=f"[v2.5/{args.phase}]")
+                         progress_label=f"[v3.0/alpha-{args.phase}]")
     print("Done. CSVs in", args.out)
-    if summary.get("failed", 0) > 0:
+    if not summary.get("complete", summary.get("failed", 0) == 0):
         sys.exit(1)
 
 

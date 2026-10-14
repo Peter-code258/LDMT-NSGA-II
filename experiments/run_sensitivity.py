@@ -17,15 +17,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from algorithms import DynamicDriver, LDTNSGA2
 from experiments.common import (RunConfig, ExperimentRunner, problem_factory,
-                                 ROW_FIELDS)
+                                 ROW_FIELDS, run_single, git_commit,
+                                 git_dirty, environment_meta, make_run_id)
+
+CODE_VERSION = "v3.0"
 
 
-def run_ldt(problem_name, tau_t, n_t, N, n_gen, seed, **algo_kw):
+def run_ldt(problem_name, tau_t, n_t, N, n_gen, seed,
+            code_version=CODE_VERSION, **algo_kw):
     problem = problem_factory(problem_name, tau_t=tau_t, n_t=n_t)
     algo = LDTNSGA2(**algo_kw)
     n_envs = max(1, n_gen // tau_t)
     driver = DynamicDriver(algo, problem, problem_name, n_envs=n_envs,
-                           pop_size=N, run_seed=seed)
+                           pop_size=N, run_seed=seed,
+                           code_version=code_version)
     return driver.run(n_points=500)
 
 
@@ -37,6 +42,16 @@ def _parse_seeds(s):
 
 
 def _run_grid(study, params, problems, seeds, tau, n_gen, out, **algo_kw):
+    """One parameter sweep.
+
+    v3.0 (plan 2.2/5.1): the swept variable is recorded explicitly in both the
+    per-run metadata and the run identity.  Previously the sensitivity driver
+    wrote no metadata at all and stamped rows "unknown", which is how the
+    ``sensitivity_*_tau25`` files became indistinguishable from the main
+    ``comparison_*_tau25`` files during analysis.
+    """
+    runner = ExperimentRunner(out_dir=out)
+    runner._expected_rows = int(n_gen)
     for p in problems:
         for val in params:
             for s in seeds:
@@ -56,6 +71,24 @@ def _run_grid(study, params, problems, seeds, tau, n_gen, out, **algo_kw):
                     N, n_t = 100, val
                 else:
                     N, n_t = 100, 20
+                # the swept variable, so the run is uniquely identifiable
+                sweep = {}
+                if study == "N":
+                    sweep = {"sweep": "N", "N": N}
+                elif study == "n_t":
+                    sweep = {"sweep": "n_t", "n_t": n_t}
+                elif study == "rho":
+                    sweep = {"sweep": "rho", "rho": float(val)}
+                elif study == "alpha":
+                    sweep = {"sweep": "alpha", "alpha": float(val)}
+                cfg = RunConfig(
+                    problem=p, tau_t=tau, n_t=n_t, N=N, n_gen=n_gen,
+                    algorithms=["ldt_nsga2"], seeds=range(30),
+                    code_version=CODE_VERSION,
+                    experiment_group=f"sensitivity_{study}",
+                    alpha=float(val) if study == "alpha" else None,
+                    rho=float(val) if study == "rho" else None,
+                    extra=sweep)
                 try:
                     rows = run_ldt(p, tau, n_t, N, n_gen, s, **algo_kw)
                     write_header = not os.path.exists(path)
@@ -65,8 +98,30 @@ def _run_grid(study, params, problems, seeds, tau, n_gen, out, **algo_kw):
                             w.writeheader()
                         for r in rows:
                             w.writerow({k: r.get(k, "") for k in ROW_FIELDS})
+                    runner._append_jsonl("run_meta.jsonl", {
+                        "run_id": make_run_id(cfg, "ldt_nsga2", p, s),
+                        "config_hash": cfg.config_hash(),
+                        "config": cfg.config_dict(),
+                        "experiment_group": cfg.experiment_group,
+                        "algorithm": "ldt_nsga2",
+                        "problem": p, "tau_t": tau, "n_t": n_t, "N": N,
+                        "n_gen": n_gen, "seed": int(s),
+                        "n_gen_rows": len(rows),
+                        "exp": tag,
+                        "status": "ok",
+                        "code_version": CODE_VERSION,
+                        "git_commit": git_commit(),
+                        "git_dirty": git_dirty(),
+                        "environment": environment_meta(),
+                    })
                 except Exception as e:
                     print(f"  [FAIL] {tag}/seed{s}: {e}")
+                    runner._append_jsonl("failed_runs.jsonl", {
+                        "exp": tag, "algorithm": "ldt_nsga2", "problem": p,
+                        "tau_t": tau, "seed": int(s), "error": str(e),
+                        "experiment_group": cfg.experiment_group,
+                        "code_version": CODE_VERSION,
+                        "git_commit": git_commit()})
 
 
 def main():

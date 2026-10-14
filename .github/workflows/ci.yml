@@ -1,0 +1,93 @@
+name: CI
+
+# v3.0 (plan 2.7): automated quality gate.  Runs on every push and pull
+# request.  Deliberately does NOT run the full experiment suite -- the six
+# thousand reported runs belong in a manual, versioned batch.  What it does
+# check is that a clean checkout can install, test, self-verify the benchmark
+# definitions, and produce a report, on both Linux and Windows.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.9", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Authoritative dMOP self-check
+        run: python -m scripts.check_dmop_authoritative
+
+      - name: Smoke experiment (isolated output directory)
+        # MUST write to an isolated directory: results/_ci_smoke is never part
+        # of the reported data.  results/raw and results/raw_v25 are frozen.
+        run: >
+          python -m experiments.run_comparison
+          --problems FDA3 --taus 25 --seeds 0
+          --out results/_ci_smoke --n-gen 50 --limit-seeds 1 --algos nsga2_static
+
+      - name: Metadata chain is intact
+        # Fails if a per-generation row cannot be traced to one run, or if the
+        # recorded version does not match the configured version.
+        shell: python
+        run: |
+          import csv, json, pathlib, sys
+          root = pathlib.Path("results/_ci_smoke")
+          csvs = sorted(root.glob("*.csv"))
+          assert csvs, "smoke run produced no CSV"
+          with csvs[0].open(newline="", encoding="utf-8") as fh:
+              rows = list(csv.DictReader(fh))
+          assert rows, "smoke CSV is empty"
+          for col in ("code_version", "run_id"):
+              assert col in rows[0], f"missing column {col}"
+              assert all(r[col] for r in rows), f"empty {col} in some rows"
+          assert {r["code_version"] for r in rows} == {"v3.0"}, \
+              f"unexpected version stamps: {{r['code_version'] for r in rows}}"
+          meta = [json.loads(l) for l in
+                  (root / "run_meta.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+          assert meta, "no run metadata written"
+          for key in ("run_id", "config_hash", "experiment_group",
+                      "git_commit", "git_dirty", "n_gen_rows", "status"):
+              assert key in meta[0], f"metadata missing {{key}}"
+          assert meta[0]["status"] == "ok"
+          print("metadata chain OK:", meta[0]["run_id"], meta[0]["code_version"])
+
+      - name: Report build (from a clean checkout)
+        # plan 2.3: must not depend on a machine-specific absolute path.
+        run: |
+          python analyze.py
+          python build_report.py
+
+      - name: Report is self-contained
+        shell: python
+        run: |
+          import pathlib
+          p = pathlib.Path("ldmt-experiment-report/index.html")
+          assert p.exists(), "report was not generated"
+          html = p.read_text(encoding="utf-8", errors="replace")
+          assert "<script" in html or "<style" in html, "no inlined assets"
+          print("report bytes:", p.stat().st_size)

@@ -78,15 +78,44 @@ class LDTNSGA2:
             self._probe = np.asarray(prev_X[:n], dtype=float).copy()
         return self._probe
 
+    def establish_baseline(self, problem):
+        """Record the probe's objective values in the CURRENT environment.
+
+        v3.0 (plan 2.6): the change magnitude D_k is a difference between two
+        environments' probe readings, so it is only defined once a reading
+        exists.  Previously the first call to :meth:`_detect_change` happened
+        during the first *response* -- i.e. after the environment had already
+        changed -- so it had nothing to compare against and returned 0.0,
+        disguising "unknown" as "no change" and corrupting the adaptive-sigma
+        diagnostic at the first transition.
+
+        The driver now calls this at the start of every environment (including
+        environment 0), so a real D_k is available from the first change
+        onwards.  The probe is problem-owned and fixed, so this does not
+        consume the decision variables and is safe to call before the search.
+        """
+        self._ensure_probe(np.empty((0, problem.n_var)), problem)
+        if self._probe is None:
+            return None
+        self._prev_probe_F = problem._calc_objectives(
+            np.atleast_2d(self._probe))
+        return None
+
     def _detect_change(self, problem):
+        """Relative probe change vs. the previous environment, or None.
+
+        Returning ``None`` means "not measurable" (no baseline yet) and is
+        deliberately distinct from ``0.0`` meaning "measured, no change".
+        """
         probe = self._probe
         if probe is None:
-            return 0.0
+            return None
         new_F = problem._calc_objectives(np.atleast_2d(probe))
         prev_F = self._prev_probe_F
         if prev_F is None:
+            # no baseline: record one, but report "unavailable", not "zero"
             self._prev_probe_F = new_F
-            return 0.0
+            return None
         cd = ChangeDetector(probe, problem.n_obj)
         Dk = cd.detect(prev_F, new_F)
         self._prev_probe_F = new_F
@@ -165,7 +194,7 @@ class LDTNSGA2:
 
         # 5. adaptive sigma scale (capped, normalized by running mean of |D_k|)
         sigma_scale = 1.0
-        if self.adaptive_transfer:
+        if self.adaptive_transfer and Dk is not None:
             self._dk_sum += abs(Dk)
             self._dk_n += 1
             dk_ref = self._dk_sum / self._dk_n
@@ -221,7 +250,8 @@ class LDTNSGA2:
             "lambda_k": 1.0,
             "boundary_clip_ratio": bclip,
             "n_nd": n_nd,
-            "Dk": float(Dk),
+            # v3.0 (plan 2.6): None = "not measurable yet"; never a fake 0.0
+            "Dk": (None if Dk is None else float(Dk)),
             "sigma_scale": sigma_scale,
         }
 

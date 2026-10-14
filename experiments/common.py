@@ -13,6 +13,7 @@ import os
 import csv
 import json
 import time
+import hashlib
 import platform
 import subprocess
 import dataclasses
@@ -100,7 +101,7 @@ ROW_FIELDS = [
     "algorithm", "problem", "seed", "population_size", "total_generations",
     "n_t", "tau_t", "environment_index", "generation", "IGD", "HV",
     "generation_runtime_s", "migration_runtime_s", "n_evaluations",
-    "code_version", "lambda_k", "boundary_clip_ratio", "n_nd",
+    "code_version", "run_id", "lambda_k", "boundary_clip_ratio", "n_nd",
 ]
 
 
@@ -114,9 +115,48 @@ class RunConfig:
     algorithms: List[str] = dataclasses.field(
         default_factory=lambda: list(CANONICAL_ALGOS))
     seeds: range = range(30)
-    code_version: str = "v2.4"
+    # v3.0: default code version for new experiments.  Must be overridden by
+    # each driver so the stamp on disk matches the code that really ran.
+    code_version: str = "v3.0"
+    # v3.0 (plan 2.2/5.1): identifies WHICH experiment a run belongs to, so
+    # different experiment groups and parameter sweeps can never be merged by
+    # accident (the earlier "sensitivity tau25 merged with main FDA tau25"
+    # bug).  A run is uniquely keyed by (experiment_group, algorithm, problem,
+    # tau_t, N, n_t, seed) plus any non-default sweep parameters.
+    experiment_group: str = "unspecified"
+    # Parameters that only some experiments set.  ``None`` means "not
+    # applicable to this experiment" and is recorded as an explicit null, so a
+    # sweep value can never be confused with "left at default".
+    alpha: float = None
+    rho: float = None
+    extra: dict = dataclasses.field(default_factory=dict)
     # v2.4 (K6 fix): the unused ``evals_per_env`` field was removed; the real
     # evaluation budget per environment is N * tau_t (driver-controlled).
+
+    def config_dict(self):
+        """Every parameter that can change a run's behaviour."""
+        d = {
+            "problem": self.problem,
+            "tau_t": int(self.tau_t),
+            "n_t": int(self.n_t),
+            "N": int(self.N),
+            "n_gen": int(self.n_gen),
+            "algorithms": sorted(self.algorithms),
+            "seed_range": [min(self.seeds), max(self.seeds),
+                           len(list(self.seeds))],
+            "code_version": self.code_version,
+            "experiment_group": self.experiment_group,
+            "alpha": self.alpha,
+            "rho": self.rho,
+        }
+        d.update(self.extra or {})
+        return d
+
+    def config_hash(self):
+        """Stable hash of the behaviour-affecting configuration."""
+        blob = json.dumps(self.config_dict(), sort_keys=True,
+                          ensure_ascii=True, default=str)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def problem_factory(problem_name, tau_t=25, n_t=20):
@@ -179,14 +219,51 @@ def environment_meta():
     }
 
 
+def git_dirty():
+    """True when the working tree has uncommitted changes (or git is absent).
+
+    plan 2.1/5.1: a run that was produced from a dirty tree cannot be traced
+    to a single commit, so the fact must be recorded rather than implied.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True,
+            timeout=5, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if out.returncode == 0:
+            return bool(out.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def make_run_id(cfg, algorithm_name, problem_name, seed):
+    """Immutable identity for one run (plan 5.1).
+
+    Stable across processes and machines: it is derived from the
+    behaviour-affecting configuration, not from a clock or a random source, so
+    re-running the same command reproduces the same id and duplicates are
+    detectable.
+    """
+    blob = json.dumps({
+        "config_hash": cfg.config_hash(),
+        "algorithm": str(algorithm_name),
+        "problem": str(problem_name),
+        "seed": int(seed),
+    }, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:20]
+
+
 def run_single(algorithm_name, problem_name, cfg, seed, return_meta=False):
     """Run one (algorithm, problem, seed); return rows (+ meta dict)."""
     t0 = time.perf_counter()
     problem = problem_factory(problem_name, tau_t=cfg.tau_t, n_t=cfg.n_t)
     algo = build_algorithm(algorithm_name)
     n_envs = max(1, cfg.n_gen // cfg.tau_t)
+    run_id = make_run_id(cfg, algorithm_name, problem_name, seed)
     driver = DynamicDriver(algo, problem, problem_name, n_envs=n_envs,
-                           pop_size=cfg.N, run_seed=seed)
+                           pop_size=cfg.N, run_seed=seed,
+                           code_version=cfg.code_version)
+    driver.run_id = run_id
     rows = driver.run(n_points=500)
     # validate
     for r in rows:
@@ -197,6 +274,10 @@ def run_single(algorithm_name, problem_name, cfg, seed, return_meta=False):
                     f"Non-finite {f} in {algorithm_name}/{problem_name}"
                     f"/seed{seed}: {v}")
     meta = {
+        "run_id": run_id,
+        "config_hash": cfg.config_hash(),
+        "config": cfg.config_dict(),
+        "experiment_group": cfg.experiment_group,
         "algorithm": getattr(algo, "name", algo.__class__.__name__),
         "algorithm_cli_name": algorithm_name,
         "problem": problem_name,
@@ -205,10 +286,12 @@ def run_single(algorithm_name, problem_name, cfg, seed, return_meta=False):
         "N": cfg.N,
         "n_gen": cfg.n_gen,
         "seed": int(seed),
+        "n_gen_rows": len(rows),
         "n_eval_total": int(driver.n_eval_total),
         "n_eval_per_env": [int(v) for v in driver.n_eval_per_env],
         "runtime_s": round(time.perf_counter() - t0, 3),
         "git_commit": git_commit(),
+        "git_dirty": git_dirty(),
         "code_version": cfg.code_version,
         "status": "ok",
         "environment": environment_meta(),
@@ -227,22 +310,45 @@ class ExperimentRunner:
     def __init__(self, out_dir="results/raw"):
         self.out_dir = out_dir
         os.makedirs(out_dir, exist_ok=True)
+        # Set by run() so completeness checks know how many rows a full run has.
+        self._expected_rows = None
 
     def _path(self, exp_name, algo, problem, tau):
         return os.path.join(
             self.out_dir,
             f"{exp_name}_{algo}_{problem}_tau{tau}.csv")
 
-    def _existing_seeds(self, path):
+    def _seed_row_counts(self, path):
+        """Rows-per-seed for one CSV (empty dict when the file is absent)."""
         if not os.path.exists(path):
-            return set()
-        seeds = set()
+            return {}
+        counts = {}
         with open(path, "r", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if "seed" in row and row["seed"]:
-                    seeds.add(int(row["seed"]))
-        return seeds
+                    s = int(row["seed"])
+                    counts[s] = counts.get(s, 0) + 1
+        return counts
+
+    def _existing_seeds(self, path):
+        """Seeds present in the CSV *with a complete row set*.
+
+        plan 2.2/5.2: a seed whose rows are truncated (interrupted run, disk
+        full, killed process) must NOT count as done -- otherwise a resumed
+        experiment silently reports success on partial data.
+        """
+        counts = self._seed_row_counts(path)
+        if self._expected_rows is None:
+            return set(counts)
+        return {s for s, n in counts.items() if n >= self._expected_rows}
+
+    def _partial_seeds(self, path):
+        """Seeds present but with fewer rows than a complete run."""
+        if self._expected_rows is None:
+            return {}
+        counts = self._seed_row_counts(path)
+        return {s: n for s, n in counts.items() if n < self._expected_rows}
 
     def _write_rows(self, path, rows):
         write_header = not os.path.exists(path)
@@ -252,6 +358,36 @@ class ExperimentRunner:
                 writer.writeheader()
             for r in rows:
                 writer.writerow({k: r.get(k, "") for k in ROW_FIELDS})
+
+    def _drop_partial_seeds(self, path):
+        """Rewrite ``path`` keeping only fully-complete seeds.
+
+        v3.0 (plan 5.2): a truncated seed must be re-run.  Because rows are
+        appended, re-running would otherwise leave the old partial rows in
+        place and the file would hold a duplicated, inconsistent run for that
+        seed.  Dropping the partial rows first makes the re-run clean.
+        """
+        if not os.path.exists(path) or self._expected_rows is None:
+            return 0
+        partial = self._partial_seeds(path)
+        if not partial:
+            return 0
+        keep = []
+        with open(path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            fields = reader.fieldnames
+            for row in reader:
+                sd = row.get("seed")
+                if not sd:
+                    continue
+                if int(sd) not in partial:
+                    keep.append(row)
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fields or ROW_FIELDS)
+            writer.writeheader()
+            for row in keep:
+                writer.writerow(row)
+        return len(partial)
 
     def _append_jsonl(self, name, record):
         with open(os.path.join(self.out_dir, name), "a",
@@ -268,13 +404,26 @@ class ExperimentRunner:
             seeds = list(cfg.seeds)
         if limit_seeds is not None and limit_seeds > 0:
             seeds = list(seeds)[:limit_seeds]
+        # v3.0 (plan 5.2): a complete run writes n_gen rows (one per
+        # generation); anything short of that is a truncated run.
+        self._expected_rows = int(cfg.n_gen)
         combos = [(p, t, a, s) for p in probs for t in ts
                   for a in algos for s in seeds]
         n_done = 0
         n_skipped = 0
         failures = []
+        partial_before = {}
+        cleaned = set()
         for i, (p, t, a, s) in enumerate(combos):
             path = self._path(exp_name, a, p, t)
+            # v3.0 (plan 5.2): clear truncated rows for this file once, so a
+            # re-run of a partial seed appends cleanly instead of duplicating.
+            if path not in cleaned:
+                n_bad = self._drop_partial_seeds(path)
+                if n_bad:
+                    print(f"  [RESUME] dropped {n_bad} truncated seed(s) "
+                          f"from {os.path.basename(path)}")
+                cleaned.add(path)
             done = self._existing_seeds(path)
             if s in done:
                 n_skipped += 1
@@ -282,7 +431,10 @@ class ExperimentRunner:
             sub_cfg = RunConfig(problem=p, tau_t=t, n_t=cfg.n_t, N=cfg.N,
                                 n_gen=cfg.n_gen,
                                 algorithms=cfg.algorithms,
-                                code_version=cfg.code_version)
+                                code_version=cfg.code_version,
+                                experiment_group=cfg.experiment_group,
+                                alpha=cfg.alpha, rho=cfg.rho,
+                                extra=dict(cfg.extra or {}))
             try:
                 rows, meta = run_single(a, p, sub_cfg, s, return_meta=True)
             except Exception as e:
@@ -294,7 +446,8 @@ class ExperimentRunner:
                                     "problem": p, "tau_t": t, "seed": s,
                                     "error": str(e), "git_commit":
                                     git_commit(), "code_version":
-                                    cfg.code_version})
+                                    cfg.code_version,
+                                    "experiment_group": cfg.experiment_group})
                 continue
             self._write_rows(path, rows)
             meta["exp"] = exp_name
@@ -302,15 +455,43 @@ class ExperimentRunner:
             n_done += 1
             if (i + 1) % 5 == 0 or i + 1 == len(combos):
                 print(f"  {progress_label} {i+1}/{len(combos)} combos done")
+        # v3.0 (plan 5.2): report every category explicitly.  ``missing`` is
+        # the count of combos with no data at all; ``partial`` counts seeds
+        # that exist but are truncated.  Either being non-zero means the
+        # experiment as a whole is NOT complete.
+        n_missing = 0
+        partial_before = {}
+        for (p, t, a, s) in combos:
+            path = self._path(exp_name, a, p, t)
+            if not os.path.exists(path):
+                n_missing += 1
+                continue
+            n_rows = self._seed_row_counts(path).get(s, 0)
+            if n_rows == 0:
+                n_missing += 1
+            elif self._expected_rows is not None and n_rows < self._expected_rows:
+                partial_before[f"{a}/{p}/tau{t}/seed{s}"] = n_rows
         summary = {
+            "experiment_group": cfg.experiment_group,
+            "config_hash": cfg.config_hash(),
+            "code_version": cfg.code_version,
             "expected": len(combos),
             "completed": n_done,
             "skipped_resume": n_skipped,
             "failed": len(failures),
+            "missing": n_missing,
+            "partial": len(partial_before),
+            "partial_detail": dict(sorted(partial_before.items())),
+            "complete": (len(failures) == 0 and n_missing == 0
+                         and not partial_before),
             "failures": failures,
         }
-        print(f"  [SUMMARY] expected={summary['expected']} "
+        print(f"  [SUMMARY] group={summary['experiment_group']} "
+              f"expected={summary['expected']} "
               f"completed={summary['completed']} "
               f"skipped={summary['skipped_resume']} "
-              f"failed={summary['failed']}")
+              f"failed={summary['failed']} "
+              f"missing={summary['missing']} "
+              f"partial={summary['partial']} "
+              f"complete={summary['complete']}")
         return summary

@@ -56,7 +56,7 @@ def main():
     cfg = RunConfig(problem=problems[0] if problems else "FDA1",
                     tau_t=taus[0] if taus else 25, n_t=args.n_t, N=args.n,
                     n_gen=args.n_gen, algorithms=algos, seeds=range(30),
-                    code_version="v2.2")
+                    code_version="v3.0", experiment_group="comparison")
 
     runner = ExperimentRunner(out_dir=args.out)
     try:
@@ -73,8 +73,10 @@ def main():
                          taus=taus, seeds=seeds, limit_seeds=args.limit_seeds,
                          progress_label="[comparison]")
     print("Done. CSVs in", args.out)
-    # v2.2 (P1-3.6): non-zero exit when any combo failed
-    if summary.get("failed", 0) > 0:
+    # v2.2 (P1-3.6): non-zero exit when any combo failed.
+    # v3.0 (plan 5.2): also non-zero when runs are missing or truncated, so a
+    # partial sweep can never be mistaken for a finished one.
+    if not summary.get("complete", summary.get("failed", 0) == 0):
         sys.exit(1)
 
 
